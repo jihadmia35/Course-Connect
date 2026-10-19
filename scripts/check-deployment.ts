@@ -54,7 +54,7 @@ if (process.env.DATABASE_URL) {
 }
 if (runtimeUrl?.hostname.endsWith('.pooler.supabase.com') && runtimeUrl.port === '5432')
   warnings.push(
-    'The runtime uses the session pooler. Configure the dashboard-provided transaction pooler URL for Vercel; retain the session/direct URL for migrations.',
+    'DATABASE_URL specifies the session pooler. The current Vercel runtime automatically uses port 6543 with one local connection; an explicit dashboard-provided transaction URL is still preferred. Retain the session/direct URL for migrations.',
   );
 const appUrl = process.env.APP_URL?.trim();
 if (appUrl) {

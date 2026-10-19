@@ -45,4 +45,6 @@ Storage uploads use the secret client only after admin authorization and binary 
 
 ## Scale boundaries
 
+The Prisma client is reused per process. Vercel instances use a one-connection `pg` pool and normalize Supabase session-pooler runtime URLs to transaction mode; local processes retain up to five connections. Migration URLs are independent and never rewritten.
+
 The MVP loads one catalog per server request and filters it on the client. This is suitable for the supplied 496-section directory and keeps filter interactions immediate. For a large multi-year directory, move filtering/counts into paginated Prisma queries and fetch only selected-semester sections. The migration/test setup does not pretend to verify Supabase network reliability, connection limits, or production concurrency. Those require a configured staging project.

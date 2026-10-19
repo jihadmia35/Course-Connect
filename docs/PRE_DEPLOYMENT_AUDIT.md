@@ -9,7 +9,7 @@ The application passes local build and functional checks. Complete the productio
 | Clean `npm ci`, including Prisma postinstall generation         | Passed in a temporary source copy with local environment files excluded                                                                                |
 | Final production build                                          | Passed without Supabase credentials or a live database connection                                                                                      |
 | Strict TypeScript, ESLint, formatting, Prisma schema validation | Passed                                                                                                                                                 |
-| Unit/integration/security tests                                 | 86 passed in 9 files, including the automatic-origin regressions                                                                                       |
+| Unit/integration/security tests                                 | 97 passed in 10 files, including automatic-origin and serverless-connection regressions                                                                |
 | Desktop/mobile browser suite                                    | 18 passed; 4 intentionally skipped duplicate/inapplicable viewport cases                                                                               |
 | Real browser submission workflow                                | Passed against a disposable PostgreSQL-compatible database                                                                                             |
 | Migration workflow                                              | All 3 migrations applied locally; repeat deploy had no pending changes; status up to date                                                              |
@@ -67,3 +67,7 @@ npm run check:deployment -- --source '/path/to/advising.html' --output /tmp/seu-
 This command performs SELECT/SHOW operations inside a read-only transaction. Its output contains status/counts rather than credentials. It does not create a photo bucket, run migrations, import data, or create administrator accounts. Warnings require review even if the command has no hard blockers.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete deployment guide.
+
+## Production incident follow-up: session connection limit
+
+The first live deployment returned `EMAXCONNSESSION` / Prisma `P2039`: the configured Supabase session pool had a 15-client limit. The app now normalizes Supabase session-pooler runtime URLs to transaction mode on Vercel and limits the per-instance `pg` pool to one connection. `DIRECT_URL`, credentials, TLS options, and database records are unchanged. The exact fixed runtime factory was verified against Supabase inside a read-only transaction: 122 faculty, 69 courses, 496 sections, and the CSE361 section 9 relationships loaded correctly through port 6543. Production compilation, strict TypeScript, lint, and all 97 tests passed. The fix still needs to be pushed/redeployed; an already deployed older build is not changed by local edits. See the deployment guide's EMAXCONNSESSION section for an immediate environment-only recovery.

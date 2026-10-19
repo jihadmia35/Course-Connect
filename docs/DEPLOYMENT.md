@@ -4,7 +4,7 @@ The current project was audited on 20 October 2026. Read [PRE_DEPLOYMENT_AUDIT.m
 
 ## Prepare the database
 
-For a new Supabase project, follow the README to configure Auth, create the photo bucket, grant an admin, and import into the confirmed semester. For the existing project, only complete the setup items in the audit; its data and admin mapping already exist. Use the dashboard's correct pooler connection string for your region/project. Use the transaction pooler (6543) for Vercel runtime traffic. Prefer the direct URL or session pooler (5432) for the Prisma migration CLI. Keep the runtime connection pool small for serverless instances.
+For a new Supabase project, follow the README to configure Auth, create the photo bucket, grant an admin, and import into the confirmed semester. For the existing project, only complete the setup items in the audit; its data and admin mapping already exist. Use the dashboard's correct pooler connection string for your region/project. Use the transaction pooler (6543) for Vercel runtime traffic. Prefer the direct URL or session pooler (5432) for the Prisma migration CLI. The runtime pool is limited to one connection per Vercel instance. For compatibility with an existing session-pooler environment value, the app automatically switches Supabase `*.pooler.supabase.com:5432` to port `6543` on Vercel, preserving credentials and TLS options. This does not alter `DIRECT_URL` or the stored environment value.
 
 Run `npm ci`, `npm run db:validate`, and `npm run db:deploy` against the intended project in a trusted terminal or release job. Apply the committed migrations once before the first app release; do not use `db push` as a production migration strategy. Back up existing databases before subsequent schema changes. Read SQL changes before applying them. RLS/revocation SQL is included in migrations. Run `supabase/storage.sql` separately in the project SQL editor.
 
@@ -39,3 +39,11 @@ These require the owner's credentials and are not claimed as completed by local 
 Use Supabase backups and migration history for recovery. Review reports in `/admin/reports`, preserve import audit entries, and monitor rate-limit spikes. Old rate-limit buckets may be removed after expiry by trusted maintenance SQL. Revoke admin access with a trusted database deletion from `AdminUser`; there is intentionally no public admin-grant endpoint.
 
 The app is prepared for Vercel; it has not been published or connected to a university-owned system. No deployment credentials were supplied.
+
+## EMAXCONNSESSION after deployment
+
+`max clients reached in session mode ... pool_size: 15` means the Supabase session pool has been exhausted. Several Vercel instances with five local connections each can reach this limit even while pages are only being prefetched.
+
+Deploy the current fix: Vercel app traffic uses the Supabase transaction pooler and a one-connection local pool. Alternatively, for immediate recovery on the older build, change only the pooler port from `5432` to `6543` in Vercel's `DATABASE_URL`, keeping the username, percent-encoded password, database, and TLS query parameters unchanged, then redeploy. Keep `DIRECT_URL` on the migration/session endpoint. No schema change, import, password reset, or database restart is needed.
+
+This matches [Supabase's connection-limit guidance](https://supabase.com/docs/guides/database/prisma/prisma-troubleshooting#max-client-connections-reached). The fix does not disable TLS or certificate verification. A streamed Next.js page can return HTTP 200 while a data request fails and renders the error boundary; inspect runtime logs rather than relying on the status alone.

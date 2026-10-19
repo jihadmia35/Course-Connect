@@ -1,6 +1,6 @@
 # Verification — 19 October 2026
 
-Latest comprehensive results: [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md). It records 86 tests, 18 UI scenarios, the clean production build, live read-only checks, and remaining deployment setup. Earlier results below are historical.
+Latest comprehensive results: [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md). It records 97 tests, 18 UI scenarios, the clean production build, live read-only checks, and remaining deployment setup. Earlier results below are historical.
 
 Environment: Node.js 22.23.1, npm 10.9.8, Next.js 16.4.2, React 19.3.1, Prisma 7.10.1, TypeScript 6.0.3, Tailwind 4.3.3. Local verification uses the supplied Fall - 2026 data. The original full test run used disposable databases. After the owner supplied database credentials, the Supabase database was connected using verified TLS and all three application migrations were deployed. Auth API keys and the administrator were subsequently configured and verified as described below. Storage delivery and Vercel deployment remain external checks.
 
