@@ -1,0 +1,10 @@
+node_modules
+.next
+src/generated
+package-lock.json
+data/advising-snapshot.json
+tests/fixtures
+prisma/migrations
+test-results
+test-results-db
+playwright-report

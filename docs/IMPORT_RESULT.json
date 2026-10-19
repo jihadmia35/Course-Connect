@@ -1,0 +1,47 @@
+{
+  "semester": "Fall - 2026",
+  "active": true,
+  "sourceSections": 496,
+  "verifiedSourceSections": 496,
+  "invalidSourceRows": 0,
+  "courses": 69,
+  "faculty": 122,
+  "sections": 496,
+  "distinctMeetings": 796,
+  "missingFaculty": 13,
+  "sectionExample": {
+    "courseCode": "CSE361",
+    "sectionNumber": "9"
+  },
+  "mismatches": [],
+  "history": [
+    {
+      "fileName": "UMS - naim.html",
+      "adminId": null,
+      "databaseRole": "postgres",
+      "summary": {
+        "issues": [],
+        "invalid": 0,
+        "skipped": 0,
+        "updated": 0,
+        "inserted": 496,
+        "duplicateMeetings": 9
+      },
+      "createdAt": "2026-10-19T17:32:18.895Z"
+    },
+    {
+      "fileName": "UMS - naim.html",
+      "adminId": null,
+      "databaseRole": "postgres",
+      "summary": {
+        "issues": [],
+        "invalid": 0,
+        "skipped": 496,
+        "updated": 0,
+        "inserted": 0,
+        "duplicateMeetings": 9
+      },
+      "createdAt": "2026-10-19T17:32:24.220Z"
+    }
+  ]
+}

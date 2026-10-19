@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Department {
+  id      String    @id @default(cuid())
+  code    String    @unique
+  name    String
+  faculty Faculty[]
+  courses Course[]
+}
+
+model Faculty {
+  id           String               @id @default(cuid())
+  initials     String               @unique
+  name         String
+  departmentId String?
+  department   Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  photoPath    String?
+  assignments  TeachingAssignment[]
+
+  @@index([name])
+}
+
+model Course {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  title        String
+  credits      Decimal         @db.Decimal(4, 1)
+  departmentId String?
+  department   Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  sections     CourseSection[]
+
+  @@index([title])
+}
+
+model Semester {
+  id       String          @id @default(cuid())
+  name     String          @unique
+  startsAt DateTime?       @db.Date
+  isActive Boolean         @default(false)
+  sections CourseSection[]
+  imports  ImportHistory[]
+}
+
+model CourseSection {
+  id             String               @id @default(cuid())
+  courseId       String
+  course         Course               @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  semesterId     String
+  semester       Semester             @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  number         String
+  availableSeats Int?
+  sourceNote     String?
+  sourceHash     String?
+  assignments    TeachingAssignment[]
+  schedules      SectionSchedule[]
+  groups         MessengerGroupLink[]
+
+  @@unique([semesterId, courseId, number])
+  @@index([courseId, semesterId])
+}
+
+model TeachingAssignment {
+  sectionId String
+  facultyId String
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  faculty   Faculty       @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+
+  @@id([sectionId, facultyId])
+  @@index([facultyId])
+}
+
+model SectionSchedule {
+  id        String        @id @default(cuid())
+  sectionId String
+  section   CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  day       String
+  startTime String
+  endTime   String
+  room      String
+
+  @@unique([sectionId, day, startTime, endTime, room])
+}
+
+model MessengerGroupLink {
+  id            String        @id @default(cuid())
+  sectionId     String
+  section       CourseSection @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  url           String
+  normalizedUrl String
+  createdAt     DateTime      @default(now())
+  reports       GroupReport[]
+
+  @@unique([sectionId, normalizedUrl])
+  @@index([sectionId, createdAt])
+}
+
+model GroupReport {
+  id        String             @id @default(cuid())
+  groupId   String
+  group     MessengerGroupLink @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reason    String
+  details   String?
+  resolved  Boolean            @default(false)
+  createdAt DateTime           @default(now())
+
+  @@index([resolved, createdAt])
+}
+
+model AdminUser {
+  userId    String   @id @db.Uuid
+  createdAt DateTime @default(now())
+}
+
+model ImportHistory {
+  id           String   @id @default(cuid())
+  semesterId   String
+  semester     Semester @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  fileName     String
+  checksum     String
+  summary      Json
+  adminId      String?  @db.Uuid
+  databaseRole String?
+  createdAt    DateTime @default(now())
+
+  @@index([semesterId, createdAt])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model AppSettings {
+  id                 String  @id @default("default")
+  submissionsEnabled Boolean @default(true)
+  notice             String  @default("")
+}
