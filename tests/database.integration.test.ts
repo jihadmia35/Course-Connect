@@ -121,7 +121,7 @@ describe('PostgreSQL migration and core workflows', () => {
           sectionId,
           courseId,
           semesterId,
-          url: 'https://www.m.me/j/SecondInvite/?send_source=gc%3Acopy_invite&utm_source=duplicate',
+          url: 'https://www.messenger.com/j/SecondInvite/?send_source=gc%3Acopy_invite&utm_source=duplicate',
           submitAnyway: true,
         })
       ).status,
@@ -205,5 +205,26 @@ describe('PostgreSQL migration and core workflows', () => {
     expect(policies.rows[0]?.count).toBe(0);
     await expect(engine.exec('SET ROLE anon; SELECT * FROM "AdminUser";')).rejects.toThrow();
     await engine.exec('RESET ROLE;');
+  });
+  it('detects legacy host aliases without modifying existing records or database constraints', async () => {
+    await client.appSettings.update({
+      where: { id: 'default' },
+      data: { submissionsEnabled: true },
+    });
+    const legacy = 'https://messenger.com/join/LegacyInviteToken';
+    const group = await client.messengerGroupLink.create({
+      data: { sectionId, url: legacy, normalizedUrl: legacy },
+    });
+    for (const url of [
+      'https://m.me/j/LegacyInviteToken',
+      'https://www.messenger.com/j/LegacyInviteToken/',
+    ]) {
+      expect(
+        await saveGroup(client, { sectionId, courseId, semesterId, url, submitAnyway: true }),
+      ).toEqual({ status: 'duplicate', id: group.id });
+    }
+    expect(
+      await client.messengerGroupLink.findUniqueOrThrow({ where: { id: group.id } }),
+    ).toMatchObject({ url: legacy, normalizedUrl: legacy });
   });
 });

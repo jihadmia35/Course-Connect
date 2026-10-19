@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
+function clipboardStub() {
+  const state = window as Window & { copiedInvite?: string; denyClipboard?: boolean };
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async (value: string) => {
+        if (state.denyClipboard) throw new Error('Clipboard access denied in test');
+        state.copiedInvite = value;
+      },
+    },
+  });
+}
 test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate limiting', async ({
   page,
+  browser,
 }) => {
+  await page.addInitScript(clipboardStub);
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
   await expect(page.locator('.section-card')).toHaveCount(1);
@@ -38,19 +52,28 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
       .getByRole('button', { name: 'Share group link', exact: true })
       .click();
   }
-  await share('https://m.me/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
+  await share('www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
   await expect(page.locator('.inline-group')).toHaveCount(1);
   await expect(page.locator('.inline-group a')).toHaveAttribute(
     'href',
     'https://m.me/j/FirstTestInvite',
   );
   await expect(page).toHaveURL(/\/$/);
+  await page.getByRole('button', { name: 'Copy group link', exact: true }).click();
+  expect(
+    await page.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
+  ).toBe('https://m.me/j/FirstTestInvite');
+  await expect(page.getByText('Group link copied.', { exact: true })).toBeVisible();
   await page.locator('.section-card').getByRole('link', { name: 'View section' }).click();
   await expect(page.locator('.group-row')).toHaveCount(1);
   await expect(
     page.locator('.group-row').first().getByRole('link', { name: 'Join group' }),
   ).toHaveAttribute('href', 'https://m.me/j/FirstTestInvite');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Copy group link', exact: true }).click();
+  expect(
+    await page.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
+  ).toBe('https://m.me/j/FirstTestInvite');
   await share('https://m.me/j/SecondTestInvite');
   await expect(
     page.getByRole('heading', {
@@ -66,6 +89,21 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
     page.getByRole('dialog').getByRole('combobox', { name: 'Course', exact: true }),
   ).toBeHidden();
   await expect(page.getByRole('button', { name: 'Submit Anyway', exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    (window as Window & { denyClipboard?: boolean }).denyClipboard = true;
+  });
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Copy group link', exact: true })
+    .click();
+  await expect(page.getByRole('dialog').getByLabel('Group invite link')).toHaveValue(
+    'https://m.me/j/FirstTestInvite',
+  );
+  await page.getByRole('dialog').getByRole('button', { name: 'Close dialog' }).click();
+  await expect(page.getByRole('button', { name: 'Submit Anyway', exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    (window as Window & { denyClipboard?: boolean }).denyClipboard = false;
+  });
   await page.screenshot({ path: 'test-results-db/existing-warning.png' });
   await page.getByRole('button', { name: 'Submit Anyway', exact: true }).click();
   await expect(page.locator('.group-row')).toHaveCount(2);
@@ -131,4 +169,59 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
     'https://m.me/j/SecondTestInvite',
   );
   await page.screenshot({ path: 'test-results-db/direct-join.png' });
+  // Read-only phone checks use the same disposable database; no real Messenger request.
+  const mobile = await browser.newContext({ ...devices['Pixel 7'] });
+  try {
+    await mobile.addInitScript(clipboardStub);
+    const phone = await mobile.newPage();
+    await phone.goto(page.url());
+    await phone.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
+    await expect(phone.locator('.inline-group')).toHaveCount(2);
+    await phone.getByRole('button', { name: 'Copy group link', exact: true }).first().click();
+    expect(
+      await phone.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
+    ).toBe('https://m.me/j/FirstTestInvite');
+    await phone.evaluate(() =>
+      window.addEventListener(
+        'click',
+        (event) => {
+          if ((event.target as Element).closest('.invite-join')) event.preventDefault();
+        },
+        { capture: true },
+      ),
+    );
+    await phone.locator('.inline-group a').first().click();
+    await expect(phone.locator('.inline-group a').first()).toHaveAttribute('target', '_self');
+    for (const width of [390, 320]) {
+      await phone.setViewportSize({ width, height: 844 });
+      expect(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await phone.screenshot({ path: `test-results-db/mobile-groups-${width}.png` });
+    }
+    await phone.evaluate(() => {
+      (window as Window & { denyClipboard?: boolean }).denyClipboard = true;
+    });
+    await phone.getByRole('button', { name: 'Copy group link', exact: true }).first().click();
+    const manual = phone.getByRole('dialog');
+    await expect(manual.getByLabel('Group invite link')).toHaveValue(
+      'https://m.me/j/FirstTestInvite',
+    );
+    await manual.getByLabel('Group invite link').click();
+    expect(
+      await manual
+        .getByLabel('Group invite link')
+        .evaluate(
+          (element: HTMLTextAreaElement) =>
+            element.selectionStart === 0 && element.selectionEnd === element.value.length,
+        ),
+    ).toBe(true);
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await phone.screenshot({ path: 'test-results-db/mobile-manual-copy.png' });
+    await manual.getByRole('button', { name: 'Close dialog' }).click();
+  } finally {
+    await mobile.close();
+  }
 });

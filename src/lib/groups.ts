@@ -26,7 +26,7 @@ export async function saveGroup(
       where: { sectionId: input.sectionId },
       select: { id: true, url: true, normalizedUrl: true },
     });
-    const duplicate = groups.find((g) => g.normalizedUrl === normalizedUrl);
+    const duplicate = groups.find((g) => normalizeMessengerUrl(g.normalizedUrl) === normalizedUrl);
     if (duplicate) return { status: 'duplicate', id: duplicate.id };
     if (groups.length && !input.submitAnyway)
       return { status: 'warning', groups: groups.map(({ id, url }) => ({ id, url })) };

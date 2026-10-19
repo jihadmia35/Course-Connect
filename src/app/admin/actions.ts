@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { meetingSchema } from '@/lib/parser';
 import { normalizeMessengerUrl } from '@/lib/validation';
+import { InviteResolutionError, resolveMessengerInvite } from '@/lib/resolve-invite';
 import { importHtml } from '@/lib/importer';
 const text = (max = 160) =>
   z
@@ -22,6 +23,7 @@ const optionalId = z
   .transform((s) => s || null);
 export type MutationResult = { ok: boolean; message: string; summary?: unknown };
 function failure(error: unknown): MutationResult {
+  if (error instanceof InviteResolutionError) return { ok: false, message: error.message };
   if (error instanceof z.ZodError)
     return { ok: false, message: error.issues[0]?.message ?? 'Check the form fields.' };
   const e = error as { code?: string; message?: string };
@@ -176,10 +178,20 @@ export async function saveRecord(
       });
     } else if (entity === 'groups') {
       if (!id) throw new Error('Use the public submission workflow.');
-      const normalizedUrl = normalizeMessengerUrl(get('url'));
-      await client.messengerGroupLink.update({
-        where: { id },
-        data: { url: normalizedUrl, normalizedUrl },
+      const normalizedUrl = await resolveMessengerInvite(get('url'));
+      await client.$transaction(async (tx) => {
+        const group = await tx.messengerGroupLink.findUniqueOrThrow({ where: { id } });
+        await tx.$queryRaw`SELECT id FROM "CourseSection" WHERE id = ${group.sectionId} FOR UPDATE`;
+        const others = await tx.messengerGroupLink.findMany({
+          where: { sectionId: group.sectionId, id: { not: id } },
+          select: { normalizedUrl: true },
+        });
+        if (others.some((g) => normalizeMessengerUrl(g.normalizedUrl) === normalizedUrl))
+          throw new InviteResolutionError('This invite is already listed for this section.');
+        await tx.messengerGroupLink.update({
+          where: { id },
+          data: { url: normalizedUrl, normalizedUrl },
+        });
       });
     } else if (entity === 'reports') {
       if (!id) throw new Error('Report required');

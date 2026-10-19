@@ -101,16 +101,21 @@ Semester-specific course/section counts are derived from teaching assignments. M
 
 ## Messenger and abuse controls
 
-Only these explicit HTTPS invite formats are supported:
+These Messenger group invite formats are supported (including `www` and the mobile Messenger host):
 
 ```text
 https://m.me/j/<6–256 character token>
+https://messenger.com/j/<6–256 character token>
 https://messenger.com/join/<6–256 character token>
 ```
 
-Tokens use ASCII letters, digits, `_`, and `-`. Optional `www`, a trailing slash, and known tracking parameters (`utm_*`, `fbclid`, `mibextid`, `send_source`) normalize away. Tokens remain case-sensitive. Unknown query parameters, credentials, nonstandard ports, fragments, unrelated hosts, profile URLs, and other formats are rejected. Different hosts are not assumed equivalent. Adjust the tested allowlist deliberately if Meta introduces a new format.
+Tokens use ASCII letters, digits, `_`, and `-` and remain case-sensitive. A missing scheme or legacy HTTP scheme upgrades to HTTPS. A trailing slash, known tracking parameters (`utm_*`, `fbclid`, `mibextid`, `send_source`), and the Facebook `#_=_` marker normalize away. All supported invite aliases normalize to `https://m.me/j/<token>`; existing legacy records remain unchanged and are compared by canonical form during submissions and admin edits. This requires no new database migration. Unknown invite query parameters, credentials, nonstandard ports, other fragments, profile links, and private conversation addresses are rejected.
 
-The server locks the section, checks its course and semester, checks existing normalized invites, and saves atomically. An existing distinct group causes a warning and returns existing join links. **Submit Anyway** repeats all server checks and permits a distinct URL. A database unique constraint prevents normalized duplicates within the same section, including racing requests. There are no rankings, votes, member counts, scraping, or primary-group fields.
+Public submissions and administrator edits also accept shortened web URLs and Facebook/Messenger `l.php?u=…` share wrappers. Shorteners must ultimately redirect to a supported Messenger invite. The server follows only standard HTTP redirects over HTTPS, with an eight-second deadline and a six-step bound. Each network hop validates all DNS answers, rejects private/reserved addresses, and pins the selected public address for the TLS request. It reads headers only, sends no cookies or authorization, and never executes HTML/scripts or fetches Messenger content. Login walls, JavaScript redirects, and interstitial-only shorteners require the original group invite. Resolution checks the URL destination, not whether the invite is active or whether a user can join.
+
+Every public group action includes **Copy**. Clipboard failures open a selectable manual-copy dialog. Phone taps open the invite in the current tab to reduce popup handoff problems; desktop taps open a separate tab. If Messenger shows a blank conversation, students can copy the invite and paste it into their browser. App installation, sign-in state, expired invites, and Messenger’s own handling can still affect joining.
+
+The server locks the section, checks its course and semester, checks existing normalized invites, and saves atomically. An existing distinct group causes a warning and returns existing join/copy actions. The confirmation retains the resolved Messenger URL so a mutable shortener cannot change its destination between the warning and **Submit Anyway**. The latter repeats all server checks and permits a distinct invite. A database unique constraint prevents normalized duplicates within the same section, including racing requests. There are no rankings, votes, member counts, scraping, or primary-group fields.
 
 Public submissions and reports require a same-origin JSON POST, server validation, an expiring HMAC form challenge with a two-second minimum delay, a honeypot, and persistent atomic database rate limiting. Limits per 15 minutes: 8 group attempts, 5 reports, 10 sign-in attempts. Vercel’s trusted forwarded client address is hashed with the server secret. Outside Vercel, a shared bucket is used deliberately until a trusted proxy integration is implemented. Never trust arbitrary client-supplied forwarding headers. These are MVP abuse controls; configure platform firewall/bot protection if traffic warrants it. The app does not claim these controls eliminate all spam.
 

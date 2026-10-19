@@ -43,6 +43,7 @@ describe('server administrator authorization', () => {
     const form = new FormData();
     for (const operation of [
       () => saveRecord('faculty', '', form),
+      () => saveRecord('groups', 'id', form),
       () => deleteRecord('faculty', 'id'),
       () => runImport(form),
       () => uploadPhoto('id', form),

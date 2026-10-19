@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type InputHTMLAttributes } from 'react';
 import { Plus, Pencil, Trash2, Upload, LoaderCircle, Search, FileCode2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecord, deleteRecord, uploadPhoto, runImport } from '@/app/admin/actions';
@@ -386,11 +386,15 @@ function RecordFields({
   const input = (
     name: string,
     label: string,
-    options: { type?: string; required?: boolean; maxLength?: number; step?: string } = {},
+    options: Pick<
+      InputHTMLAttributes<HTMLInputElement>,
+      'type' | 'required' | 'maxLength' | 'step' | 'inputMode' | 'autoCapitalize' | 'spellCheck'
+    > = {},
   ) => (
     <label key={name}>
       {label}
       <input
+        {...options}
         name={name}
         defaultValue={value(name)}
         type={options.type ?? 'text'}
@@ -527,8 +531,17 @@ function RecordFields({
   if (entity === 'groups')
     return (
       <>
-        {input('url', 'Messenger invite URL', { type: 'url', maxLength: 1000 })}
-        <p className="field-hint">Supported: https://m.me/j/… and https://messenger.com/join/…</p>
+        {input('url', 'Messenger invite URL', {
+          type: 'text',
+          inputMode: 'url',
+          autoCapitalize: 'none',
+          spellCheck: false,
+          maxLength: 2048,
+        })}
+        <p className="field-hint">
+          Paste a Messenger group invite or shortened link. Supports m.me/j/…, messenger.com/j/…,
+          and messenger.com/join/….
+        </p>
       </>
     );
   if (entity === 'reports')

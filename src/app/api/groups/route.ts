@@ -3,6 +3,7 @@ import { groupInput } from '@/lib/validation';
 import { assertOrigin, rateLimit, verifyToken, publicError, readJsonBody } from '@/lib/security';
 import { saveGroup } from '@/lib/groups';
 import { db } from '@/lib/db';
+import { InviteResolutionError, resolveMessengerInvite } from '@/lib/resolve-invite';
 export async function POST(request: Request) {
   try {
     assertOrigin(request);
@@ -21,8 +22,12 @@ export async function POST(request: Request) {
       );
     verifyToken(input.data.token);
     await rateLimit(request.headers, 'groups');
-    const result = await saveGroup(db(), input.data);
-    return NextResponse.json(result, { status: result.status === 'created' ? 201 : 200 });
+    const resolvedUrl = await resolveMessengerInvite(input.data.url);
+    const result = await saveGroup(db(), { ...input.data, url: resolvedUrl });
+    return NextResponse.json(
+      { ...result, resolvedUrl },
+      { status: result.status === 'created' ? 201 : 200 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     const safe = [
@@ -34,7 +39,12 @@ export async function POST(request: Request) {
       'Submissions are currently paused.',
     ];
     return NextResponse.json(
-      { error: safe.includes(message) ? message : publicError(error) },
+      {
+        error:
+          error instanceof InviteResolutionError || safe.includes(message)
+            ? message
+            : publicError(error),
+      },
       { status: message.startsWith('Too many') ? 429 : 400 },
     );
   }

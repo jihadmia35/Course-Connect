@@ -3,7 +3,6 @@ import Link from 'next/link';
 import {
   Bookmark,
   Check,
-  ArrowUpRight,
   Users,
   CalendarDays,
   MapPin,
@@ -13,6 +12,7 @@ import {
 import type { Catalog, Meeting, SectionView } from '@/lib/types';
 import { GroupDialog, ReportDialog } from './group-form';
 import { useSavedSections } from './saved-sections';
+import { InviteActions } from './invite-actions';
 function meetingGroups(meetings: Meeting[]) {
   const groups = new Map<
     string,
@@ -115,15 +115,12 @@ export function SectionCard({
             <div className="inline-groups">
               {section.groups.map((group, i) => (
                 <div className="inline-group" key={group.id}>
-                  <a
-                    className="button button-join"
-                    href={group.url}
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                  >
-                    {section.groups.length > 1 ? `Join group ${i + 1}` : 'Join group'}
-                    <ArrowUpRight size={16} />
-                  </a>
+                  <InviteActions
+                    url={group.url}
+                    variant="join"
+                    compact
+                    label={section.groups.length > 1 ? `Join group ${i + 1}` : 'Join group'}
+                  />
                   <ReportDialog groupId={group.id} compact />
                 </div>
               ))}

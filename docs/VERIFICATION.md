@@ -1,6 +1,16 @@
 # Verification — 19 October 2026
 
-Latest comprehensive results: [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md). It records 97 tests, 18 UI scenarios, the clean production build, live read-only checks, and remaining deployment setup. Earlier results below are historical.
+Latest invite handling results are recorded below. The earlier [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md) records deployment setup and previous verification. Earlier test counts below are historical.
+
+## Mobile invites and shortened URLs — 20 October 2026
+
+- Strict TypeScript, lint, and the isolated production build passed. The runtime dependency audit reports zero vulnerabilities.
+- 164 unit/integration tests across 11 files cover supported invite aliases, canonical duplicates (including legacy stored links), admin edits/authorization, standard redirect statuses, wrappers, loops, redirect bounds, timeouts, private/reserved addresses, mixed DNS answers, and DNS pinning. Database tests use disposable PGlite instances, not Supabase.
+- All 18 desktop/mobile UI regression scenarios passed; four project-specific duplicates are intentionally skipped.
+- The disposable-database browser workflow passed: schemeless `www.messenger.com/j/…` submission, direct joining, Copy on cards/details, manual-copy fallback inside the existing-group warning, Submit Anyway, duplicate prevention, reporting, and rate limiting. Read-only mobile checks verify same-tab handoff, copying, selectable fallback text, and no horizontal page overflow at 390px and 320px. The database browser test used port 3003 in the isolated audit copy because a development server was already using 3001.
+- A real HTTPS redirect smoke test with a public redirect test endpoint and a synthetic invite resolved to the expected canonical Messenger URL. The resolver stopped before requesting Messenger. A different redirect test service returned HTTP 403 and was correctly rejected.
+- Mobile group actions, desktop actions, and the 320px manual-copy sheet were visually inspected. Native Messenger joining is not claimed to be verified: installed app versions, account state, expired invites, and device link handling can still affect it. JavaScript/interstitial-only shorteners require the original invite.
+- No live database records, schema, Auth settings, or Storage were changed. No new migration is required. Deploy the updated source to apply these changes.
 
 Environment: Node.js 22.23.1, npm 10.9.8, Next.js 16.4.2, React 19.3.1, Prisma 7.10.1, TypeScript 6.0.3, Tailwind 4.3.3. Local verification uses the supplied Fall - 2026 data. The original full test run used disposable databases. After the owner supplied database credentials, the Supabase database was connected using verified TLS and all three application migrations were deployed. Auth API keys and the administrator were subsequently configured and verified as described below. Storage delivery and Vercel deployment remain external checks.
 

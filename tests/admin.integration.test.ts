@@ -139,7 +139,7 @@ describe('authorized admin operations with real PostgreSQL persistence', () => {
       await saveRecord(
         'groups',
         groupId,
-        form({ url: 'https://www.m.me/j/EditedTestInvite/?utm_source=admin' }),
+        form({ url: 'https://www.messenger.com/j/EditedTestInvite/?utm_source=admin' }),
       ),
     ).toMatchObject({ ok: true });
     expect(
@@ -163,6 +163,24 @@ describe('authorized admin operations with real PostgreSQL persistence', () => {
     expect(
       (await state.client!.courseSection.findUniqueOrThrow({ where: { id: sectionId } })).number,
     ).toBe('1');
+  });
+  it('prevents admin edits from duplicating a legacy invite alias', async () => {
+    const legacy = 'https://messenger.com/join/LegacyAdminInvite';
+    const other = await state.client!.messengerGroupLink.create({
+      data: { sectionId, url: legacy, normalizedUrl: legacy },
+    });
+    expect(
+      await saveRecord(
+        'groups',
+        groupId,
+        form({ url: 'https://messenger.com/j/LegacyAdminInvite' }),
+      ),
+    ).toMatchObject({ ok: false, message: 'This invite is already listed for this section.' });
+    expect(
+      (await state.client!.messengerGroupLink.findUniqueOrThrow({ where: { id: groupId } }))
+        .normalizedUrl,
+    ).toBe('https://m.me/j/EditedTestInvite');
+    await state.client!.messengerGroupLink.delete({ where: { id: other.id } });
   });
   it('resolves reports and persists settings', async () => {
     reportId = (

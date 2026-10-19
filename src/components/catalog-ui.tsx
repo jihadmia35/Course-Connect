@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { BookOpen, ArrowUpRight, Users, MessageCircle, CalendarDays } from 'lucide-react';
 import type { Catalog, FacultyView, SectionView } from '@/lib/types';
 import { GroupDialog, ReportDialog } from './group-form';
+import { InviteActions } from './invite-actions';
 export function Avatar({ faculty, large = false }: { faculty: FacultyView; large?: boolean }) {
   return (
     <span
@@ -99,14 +100,7 @@ export function GroupList({ section, catalog }: { section: SectionView; catalog:
                 <p className="invite-text">{g.url}</p>
               </div>
               <div className="group-row-actions">
-                <a
-                  className="button button-primary"
-                  href={g.url}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                >
-                  Join group <ArrowUpRight size={16} />
-                </a>
+                <InviteActions url={g.url} />
                 <ReportDialog groupId={g.id} />
               </div>
             </div>
@@ -122,6 +116,11 @@ export function GroupList({ section, catalog }: { section: SectionView; catalog:
         </div>
       )}
       <p className="info-footnote">
+        {section.groups.length > 0 && (
+          <>
+            Messenger opens a blank chat? Copy the invite and paste it into your browser. <br />
+          </>
+        )}
         Invites are submitted by students. Membership and member counts are not verified.
       </p>
     </div>

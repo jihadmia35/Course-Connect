@@ -16,6 +16,7 @@ import type { Catalog } from '@/lib/types';
 import type { GroupResult } from '@/lib/groups';
 import { Modal } from './ui/dialog';
 import { Button } from './ui/button';
+import { InviteActions } from './invite-actions';
 function useChallenge(enabled: boolean) {
   const [challenge, setChallenge] = useState({ token: '', failed: false });
   const [attempt, setAttempt] = useState(0);
@@ -84,7 +85,7 @@ export function GroupDialog({
         onOpenChange={setOpen}
         title="Connect your course section"
         description="Share a Messenger invite so your classmates can find you."
-        autoFocusSelector='input[type="url"]'
+        autoFocusSelector='input[inputmode="url"]'
       >
         {form}
       </Modal>
@@ -139,9 +140,13 @@ export function GroupForm({
           token,
         }),
       });
-      const data = (await response.json()) as GroupResult & { error?: string };
+      const data = (await response.json()) as GroupResult & {
+        error?: string;
+        resolvedUrl?: string;
+      };
       if (!response.ok) throw new Error(data.error ?? 'Unable to share group.');
       if (data.status === 'warning') {
+        if (data.resolvedUrl) setUrl(data.resolvedUrl);
         setWarning(data.groups);
         return;
       }
@@ -267,8 +272,11 @@ export function GroupForm({
             <LinkIcon size={17} />
             <input
               required
-              type="url"
-              maxLength={1000}
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={2048}
               placeholder="https://m.me/j/your-invite-code"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -276,8 +284,8 @@ export function GroupForm({
           </div>
         </label>
         <p className="field-hint">
-          Paste the invite copied from Messenger. We support m.me/j/… and messenger.com/join/…
-          links.
+          Paste a Messenger group invite or shortened link. Supports m.me/j/…, messenger.com/j/…,
+          and messenger.com/join/….
         </p>
       </fieldset>
       <div className="honeypot" aria-hidden="true">
@@ -303,16 +311,13 @@ export function GroupForm({
           </h3>
           <p>You can join an existing group, or share another distinct invite.</p>
           {warning.map((g, i) => (
-            <a
-              className="button button-outline"
-              key={g.id}
-              href={g.url}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            >
-              Join Existing Group {warning.length > 1 ? i + 1 : ''}
-              <ArrowUpRight size={15} />
-            </a>
+            <div className="existing-invite-actions" key={g.id}>
+              <InviteActions
+                url={g.url}
+                variant="outline"
+                label={`Join Existing Group${warning.length > 1 ? ` ${i + 1}` : ''}`}
+              />
+            </div>
           ))}
           <button type="button" className="text-link" onClick={() => setWarning(null)}>
             Edit submission
@@ -341,11 +346,13 @@ export function GroupForm({
         ) : (
           <Plus size={17} />
         )}{' '}
-        {warning
-          ? 'Submit Anyway'
-          : !catalog.preview && catalog.submissionsEnabled && !token && !failed
-            ? 'Preparing form…'
-            : 'Share group link'}
+        {busy
+          ? 'Checking invite…'
+          : warning
+            ? 'Submit Anyway'
+            : !catalog.preview && catalog.submissionsEnabled && !token && !failed
+              ? 'Preparing form…'
+              : 'Share group link'}
       </Button>
       <p className="field-hint">
         Only share invites you have permission to share. No sign-in needed.

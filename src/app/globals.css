@@ -4157,6 +4157,66 @@ input::file-selector-button {
     padding-right: 16px;
   }
 }
+.copy-invite {
+  min-height: 44px;
+}
+.inline-group .copy-invite {
+  flex: 0 0 44px;
+  width: 44px;
+  padding: 8px;
+}
+.copy-invite-compact span,
+.inline-group .invite-join svg {
+  display: none;
+}
+.inline-group .invite-join {
+  min-width: 0;
+}
+@media (min-width: 761px) {
+  .section-card.has-groups {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+}
+.existing-invite-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.existing-invite-actions .button {
+  width: auto;
+  margin: 0;
+}
+.existing-invite-actions .invite-join {
+  flex: 1;
+}
+.existing-invite-actions .copy-invite {
+  flex-shrink: 0;
+}
+.manual-copy textarea {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  resize: none;
+}
+@media (max-width: 760px) {
+  .inline-group .copy-invite {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 8px 12px;
+  }
+  .copy-invite-compact span {
+    display: inline;
+  }
+  .existing-invite-actions {
+    flex-wrap: wrap;
+  }
+  .existing-invite-actions .button {
+    min-height: 44px;
+  }
+  .existing-invite-actions .invite-join {
+    min-width: 150px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

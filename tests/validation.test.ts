@@ -6,7 +6,7 @@ describe('Messenger URLs', () => {
       normalizeMessengerUrl(' https://www.m.me/j/AbCd_1234/?utm_source=seu&fbclid=test '),
     ).toBe('https://m.me/j/AbCd_1234');
     expect(normalizeMessengerUrl('https://www.messenger.com/join/AbCd1234/')).toBe(
-      'https://messenger.com/join/AbCd1234',
+      'https://m.me/j/AbCd1234',
     );
   });
   it('accepts copied Messenger invites and removes send_source share metadata', () => {
@@ -19,10 +19,19 @@ describe('Messenger URLs', () => {
       normalizeMessengerUrl(
         'https://messenger.com/join/CopiedInviteToken?send_source=gc%3Acopy_invite',
       ),
-    ).toBe('https://messenger.com/join/CopiedInviteToken');
+    ).toBe(canonical);
   });
   it.each([
-    'http://m.me/j/AbCd1234',
+    'https://www.messenger.com/j/AbCd_1234/',
+    'https://m.messenger.com/j/AbCd_1234?send_source=gc%3Acopy_invite',
+    'https://messenger.com/join/AbCd_1234',
+    'http://m.me/j/AbCd_1234',
+    'm.me/j/AbCd_1234',
+    '//www.messenger.com/j/AbCd_1234/#_=_',
+  ])('accepts copied invite %s', (url) => {
+    expect(normalizeMessengerUrl(url)).toBe('https://m.me/j/AbCd_1234');
+  });
+  it.each([
     'https://m.me.evil.test/j/AbCd1234',
     'https://user:password@m.me/j/AbCd1234',
     'javascript:alert(1)',
@@ -32,6 +41,9 @@ describe('Messenger URLs', () => {
     'https://m.me:444/j/AbCd1234',
     'https://m.me/j/AbCd1234?unknown=1',
     'https://messenger.com/t/123',
+    'https://messenger.com/j/short',
+    'https://messenger.com/j/' + 'a'.repeat(257),
+    'https://messenger.com/j/AbCd1234/extra',
     'https://m.me/j/%2F%2Fabcd',
   ])('rejects %s', (url) => expect(() => normalizeMessengerUrl(url)).toThrow());
   it('requires a real section identity and rejects honeypot spam', () => {

@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ rateLimit: vi.fn(), db: vi.fn(), saveGroup: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  rateLimit: vi.fn(),
+  db: vi.fn(),
+  saveGroup: vi.fn(),
+  resolve: vi.fn(),
+}));
+vi.mock('@/lib/resolve-invite', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/resolve-invite')>()),
+  resolveMessengerInvite: mocks.resolve,
+}));
 vi.mock('@/lib/db', () => ({ db: mocks.db }));
 vi.mock('@/lib/security', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/security')>()),
@@ -10,6 +19,7 @@ import { POST as groupPost } from '@/app/api/groups/route';
 import { POST as reportPost } from '@/app/api/reports/route';
 import { GET as challengeGet } from '@/app/api/challenge/route';
 import { issueToken } from '@/lib/security';
+import { InviteResolutionError } from '@/lib/resolve-invite';
 const origin = 'https://deployment-test.invalid';
 function request(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(origin + path, {
@@ -50,6 +60,7 @@ describe('public HTTP boundaries without live database access', () => {
         (await handler(request('/api/groups', {}, { origin: 'https://untrusted.invalid' }))).status,
       ).toBe(400);
     expect(mocks.db).not.toHaveBeenCalled();
+    expect(mocks.resolve).not.toHaveBeenCalled();
     expect(mocks.rateLimit).not.toHaveBeenCalled();
   });
   it('returns unavailable for writes and challenges when the database is unconfigured', async () => {
@@ -105,6 +116,40 @@ describe('public HTTP boundaries without live database access', () => {
       new Error('Too many attempts. Please try again in 15 minutes.'),
     );
     expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(429);
+    expect(mocks.saveGroup).not.toHaveBeenCalled();
+    expect(mocks.db).not.toHaveBeenCalled();
+    expect(mocks.resolve).not.toHaveBeenCalled();
+  });
+  it('resolves shortened invites only after abuse checks and returns the canonical URL for confirmation', async () => {
+    mocks.resolve.mockResolvedValue('https://m.me/j/ExpandedInvite');
+    mocks.saveGroup.mockResolvedValue({
+      status: 'warning',
+      groups: [{ id: 'existing', url: 'https://m.me/j/OtherInvite' }],
+    });
+    const input = { ...validGroup(), url: 'https://short.example/invite' };
+    const response = await groupPost(request('/api/groups', input));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'warning',
+      resolvedUrl: 'https://m.me/j/ExpandedInvite',
+    });
+    expect(mocks.rateLimit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.resolve.mock.invocationCallOrder[0],
+    );
+    expect(mocks.saveGroup).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ url: 'https://m.me/j/ExpandedInvite' }),
+    );
+  });
+  it('returns a safe expansion error without attempting persistence', async () => {
+    mocks.resolve.mockRejectedValue(
+      new InviteResolutionError('Short links must point to a public website.'),
+    );
+    const response = await groupPost(
+      request('/api/groups', { ...validGroup(), url: 'https://short.example/invite' }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Short links must point to a public website.' });
     expect(mocks.saveGroup).not.toHaveBeenCalled();
     expect(mocks.db).not.toHaveBeenCalled();
   });
