@@ -2,6 +2,17 @@
 
 Latest invite handling results are recorded below. The earlier [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md) records deployment setup and previous verification. Earlier test counts below are historical.
 
+## Native Messenger opening follow-up — 20 October 2026
+
+The owner reported that the previous same-tab change still opened a blank conversation on Android. They confirmed the same invite works on a laptop and when tapped inside a Messenger DM. This points to browser-to-app handling; it does not prove that changing tab targets repairs native joining.
+
+- Launching, copying, and displaying invites now use the full `www.messenger.com/j/<token>/` route with Messenger’s copied-invite source parameter. Stored canonical identifiers and existing database records are unchanged.
+- Opening help documents the owner-confirmed DM workaround and Android default-link settings. Joining stays one tap; opening the help is optional.
+- 172 unit/integration tests across 12 files passed, including full launch URL construction, unsafe-input rejection, token preservation, canonical identity round trips, and the existing server/database workflows. TypeScript, lint, and the isolated production build passed.
+- The disposable database browser flow checks actual current-tab navigation to a locally intercepted full Messenger URL, copied/manual-copy values, opening help at 320px, duplicate warnings, submissions, reports, and rate limiting. It sends no request to Messenger. Desktop/mobile public regression checks also pass.
+- These browser checks verify the website’s outgoing address and fallback controls. They do **not** verify the installed Messenger app or promise that its blank-chat issue is fixed. A redeployment and physical-device check are required.
+- No live database writes, migrations, Auth changes, or Storage changes were performed.
+
 ## Mobile invites and shortened URLs — 20 October 2026
 
 - Strict TypeScript, lint, and the isolated production build passed. The runtime dependency audit reports zero vulnerabilities.

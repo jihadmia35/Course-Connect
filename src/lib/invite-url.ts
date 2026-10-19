@@ -57,3 +57,10 @@ export function normalizeMessengerUrl(input: string): string {
   // One stable invite representation works with existing database constraints.
   return `https://m.me/j/${match[1]}`;
 }
+
+/** Storage identity is separate from the full invite address used for joining. */
+export function messengerLaunchUrl(input: string): string {
+  const canonical = normalizeMessengerUrl(input);
+  const token = canonical.slice('https://m.me/j/'.length);
+  return `https://www.messenger.com/j/${token}/?send_source=gc%3Acopy_invite`;
+}

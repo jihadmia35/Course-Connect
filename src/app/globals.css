@@ -4160,6 +4160,33 @@ input::file-selector-button {
 .copy-invite {
   min-height: 44px;
 }
+.invite-help {
+  min-height: 44px;
+  font-size: 12px;
+  text-align: left;
+}
+.section-card-footer .invite-help {
+  margin-left: auto;
+  font-size: 11px;
+}
+.invite-help-content {
+  display: grid;
+  gap: 18px;
+  padding-top: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.invite-help-content ol {
+  list-style: decimal;
+  padding-left: 22px;
+}
+.invite-help-content li + li {
+  margin-top: 10px;
+}
+.existing-warning > .invite-help {
+  margin-left: 16px;
+  min-height: 44px;
+}
 .inline-group .copy-invite {
   flex: 0 0 44px;
   width: 44px;

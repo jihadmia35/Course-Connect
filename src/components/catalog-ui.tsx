@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { BookOpen, ArrowUpRight, Users, MessageCircle, CalendarDays } from 'lucide-react';
 import type { Catalog, FacultyView, SectionView } from '@/lib/types';
 import { GroupDialog, ReportDialog } from './group-form';
-import { InviteActions } from './invite-actions';
+import { InviteActions, InviteHelp } from './invite-actions';
+import { messengerLaunchUrl } from '@/lib/invite-url';
 export function Avatar({ faculty, large = false }: { faculty: FacultyView; large?: boolean }) {
   return (
     <span
@@ -97,7 +98,7 @@ export function GroupList({ section, catalog }: { section: SectionView; catalog:
                   Shared{' '}
                   {new Date(g.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Dhaka' })}
                 </p>
-                <p className="invite-text">{g.url}</p>
+                <p className="invite-text">{messengerLaunchUrl(g.url)}</p>
               </div>
               <div className="group-row-actions">
                 <InviteActions url={g.url} />
@@ -118,7 +119,7 @@ export function GroupList({ section, catalog }: { section: SectionView; catalog:
       <p className="info-footnote">
         {section.groups.length > 0 && (
           <>
-            Messenger opens a blank chat? Copy the invite and paste it into your browser. <br />
+            <InviteHelp /> <br />
           </>
         )}
         Invites are submitted by students. Membership and member counts are not verified.

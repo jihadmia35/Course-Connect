@@ -16,7 +16,7 @@ import type { Catalog } from '@/lib/types';
 import type { GroupResult } from '@/lib/groups';
 import { Modal } from './ui/dialog';
 import { Button } from './ui/button';
-import { InviteActions } from './invite-actions';
+import { InviteActions, InviteHelp } from './invite-actions';
 function useChallenge(enabled: boolean) {
   const [challenge, setChallenge] = useState({ token: '', failed: false });
   const [attempt, setAttempt] = useState(0);
@@ -322,6 +322,7 @@ export function GroupForm({
           <button type="button" className="text-link" onClick={() => setWarning(null)}>
             Edit submission
           </button>
+          <InviteHelp />
         </div>
       )}
       {error && (

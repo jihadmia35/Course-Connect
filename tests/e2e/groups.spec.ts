@@ -56,25 +56,28 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await expect(page.locator('.inline-group')).toHaveCount(1);
   await expect(page.locator('.inline-group a')).toHaveAttribute(
     'href',
-    'https://m.me/j/FirstTestInvite',
+    'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
   );
   await expect(page).toHaveURL(/\/$/);
   await page.getByRole('button', { name: 'Copy group link', exact: true }).click();
   expect(
     await page.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
-  ).toBe('https://m.me/j/FirstTestInvite');
+  ).toBe('https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
   await expect(page.getByText('Group link copied.', { exact: true })).toBeVisible();
   await page.locator('.section-card').getByRole('link', { name: 'View section' }).click();
   await expect(page.locator('.group-row')).toHaveCount(1);
   await expect(
     page.locator('.group-row').first().getByRole('link', { name: 'Join group' }),
-  ).toHaveAttribute('href', 'https://m.me/j/FirstTestInvite');
+  ).toHaveAttribute(
+    'href',
+    'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
+  );
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Copy group link', exact: true }).click();
   expect(
     await page.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
-  ).toBe('https://m.me/j/FirstTestInvite');
-  await share('https://m.me/j/SecondTestInvite');
+  ).toBe('https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
+  await share('https://www.messenger.com/j/SecondTestInvite/?send_source=gc%3Acopy_invite');
   await expect(
     page.getByRole('heading', {
       name: 'A Messenger group already exists for this course section.',
@@ -82,7 +85,7 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Join Existing Group' })).toHaveAttribute(
     'href',
-    'https://m.me/j/FirstTestInvite',
+    'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
   );
   await expect(page.locator('.group-row')).toHaveCount(1);
   await expect(
@@ -97,7 +100,7 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
     .getByRole('button', { name: 'Copy group link', exact: true })
     .click();
   await expect(page.getByRole('dialog').getByLabel('Group invite link')).toHaveValue(
-    'https://m.me/j/FirstTestInvite',
+    'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
   );
   await page.getByRole('dialog').getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByRole('button', { name: 'Submit Anyway', exact: true })).toBeVisible();
@@ -147,7 +150,7 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
         semesterId,
         courseId,
         sectionId,
-        url: 'https://m.me/j/FirstTestInvite',
+        url: 'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
         submitAnyway: true,
         website: '',
         token,
@@ -162,11 +165,11 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await expect(page.locator('.inline-group')).toHaveCount(2);
   await expect(page.locator('.inline-group a').nth(0)).toHaveAttribute(
     'href',
-    'https://m.me/j/FirstTestInvite',
+    'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
   );
   await expect(page.locator('.inline-group a').nth(1)).toHaveAttribute(
     'href',
-    'https://m.me/j/SecondTestInvite',
+    'https://www.messenger.com/j/SecondTestInvite/?send_source=gc%3Acopy_invite',
   );
   await page.screenshot({ path: 'test-results-db/direct-join.png' });
   // Read-only phone checks use the same disposable database; no real Messenger request.
@@ -180,18 +183,23 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
     await phone.getByRole('button', { name: 'Copy group link', exact: true }).first().click();
     expect(
       await phone.evaluate(() => (window as Window & { copiedInvite?: string }).copiedInvite),
-    ).toBe('https://m.me/j/FirstTestInvite');
-    await phone.evaluate(() =>
-      window.addEventListener(
-        'click',
-        (event) => {
-          if ((event.target as Element).closest('.invite-join')) event.preventDefault();
-        },
-        { capture: true },
-      ),
+    ).toBe('https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
+    // Exercise the actual browser navigation with a locally fulfilled destination.
+    // This checks the outbound URL and tab, not Messenger's native app behavior.
+    await phone.route('https://www.messenger.com/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<p>Local invite navigation test</p>',
+      }),
     );
     await phone.locator('.inline-group a').first().click();
-    await expect(phone.locator('.inline-group a').first()).toHaveAttribute('target', '_self');
+    await expect(phone).toHaveURL(
+      'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
+    );
+    expect(mobile.pages()).toHaveLength(1);
+    await phone.goto(page.url());
+    await phone.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
     for (const width of [390, 320]) {
       await phone.setViewportSize({ width, height: 844 });
       expect(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -199,13 +207,17 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
       );
       await phone.screenshot({ path: `test-results-db/mobile-groups-${width}.png` });
     }
+    await phone.getByRole('button', { name: 'Trouble opening Messenger?', exact: true }).click();
+    await expect(phone.getByRole('dialog')).toContainText('Paste the invite into a Messenger DM');
+    await phone.screenshot({ path: 'test-results-db/mobile-invite-help.png' });
+    await phone.getByRole('dialog').getByRole('button', { name: 'Close dialog' }).click();
     await phone.evaluate(() => {
       (window as Window & { denyClipboard?: boolean }).denyClipboard = true;
     });
     await phone.getByRole('button', { name: 'Copy group link', exact: true }).first().click();
     const manual = phone.getByRole('dialog');
     await expect(manual.getByLabel('Group invite link')).toHaveValue(
-      'https://m.me/j/FirstTestInvite',
+      'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
     );
     await manual.getByLabel('Group invite link').click();
     expect(

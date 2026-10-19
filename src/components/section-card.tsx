@@ -12,7 +12,7 @@ import {
 import type { Catalog, Meeting, SectionView } from '@/lib/types';
 import { GroupDialog, ReportDialog } from './group-form';
 import { useSavedSections } from './saved-sections';
-import { InviteActions } from './invite-actions';
+import { InviteActions, InviteHelp } from './invite-actions';
 function meetingGroups(meetings: Meeting[]) {
   const groups = new Map<
     string,
@@ -151,6 +151,7 @@ export function SectionCard({
             Student-shared
           </span>
         )}
+        {section.groups.length > 0 && showGroups && <InviteHelp />}
       </div>
     </article>
   );
