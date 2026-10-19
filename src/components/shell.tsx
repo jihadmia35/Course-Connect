@@ -143,7 +143,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         Skip to content
       </a>
       <aside className="workspace-sidebar">
-        <Link href="/" className="brand" aria-label="SEU Course Connect home">
+        <Link prefetch={false} href="/" className="brand" aria-label="SEU Course Connect home">
           <span className="brand-mark">
             <Layers size={25} strokeWidth={2.2} />
           </span>
@@ -160,6 +160,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <nav className="primary-nav" aria-label="Main navigation">
           {navigation.map((item) => (
             <Link
+              prefetch={false}
               href={item.href}
               aria-label={item.accessible}
               aria-current={active(item.href) ? 'page' : undefined}
@@ -183,17 +184,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
               for your class.
             </h3>
             <p>Have a group invite? Make it easier for them to join.</p>
-            <Link href="/submit">
+            <Link prefetch={false} href="/submit">
               Share an invite <ArrowUpRight size={16} />
             </Link>
           </div>
         )}
         <div className="sidebar-bottom">
-          <Link href="/about">
+          <Link prefetch={false} href="/about">
             <HelpCircle size={17} />
             About this directory
           </Link>
-          <Link href={isAdmin ? '/' : '/admin'}>
+          <Link prefetch={false} href={isAdmin ? '/' : '/admin'}>
             {isAdmin ? <ArrowLeft size={17} /> : <ShieldCheck size={17} />}
             {isAdmin ? 'Student portal' : 'Administration'}
           </Link>
@@ -206,7 +207,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="main-shell">
         <header className="workspace-topbar">
-          <Link href="/" className="mobile-brand" aria-label="SEU Course Connect home">
+          <Link
+            prefetch={false}
+            href="/"
+            className="mobile-brand"
+            aria-label="SEU Course Connect home"
+          >
             <span className="brand-mark">
               <Layers size={21} />
             </span>
@@ -231,12 +237,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </span>
             )}
             {isAdmin || isLogin ? (
-              <Link className="button button-outline header-share portal-return" href="/">
+              <Link
+                prefetch={false}
+                className="button button-outline header-share portal-return"
+                href="/"
+              >
                 <ArrowLeft size={17} />
                 <span>Student portal</span>
               </Link>
             ) : (
-              <Link className="button button-primary header-share" href="/submit">
+              <Link prefetch={false} className="button button-primary header-share" href="/submit">
                 <Plus size={17} />
                 <span>Share a group</span>
               </Link>
@@ -247,10 +257,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <footer className="page-footer">
           <span>Find your class. Bring your people.</span>
           <div className="footer-links">
-            <Link href="/about">
+            <Link prefetch={false} href="/about">
               Student-shared invites · About & sources <ArrowUpRight size={13} />
             </Link>
-            <Link href="/admin">Administration</Link>
+            <Link prefetch={false} href="/admin">
+              Administration
+            </Link>
           </div>
         </footer>
       </div>
@@ -261,6 +273,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         >
           {mobileNavigation.map((item) => (
             <Link
+              prefetch={false}
               key={item.href}
               href={item.href}
               aria-label={item.accessible}

@@ -248,7 +248,7 @@ function CourseCard({
           <BookOpen size={23} />
         </span>
         <div className="course-summary-name">
-          <Link href={`/courses/${id}?semester=${semester}`} className="eyebrow">
+          <Link prefetch={false} href={`/courses/${id}?semester=${semester}`} className="eyebrow">
             {course.code}
             <ArrowUpRight size={12} />
           </Link>

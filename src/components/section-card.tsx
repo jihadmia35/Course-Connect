@@ -50,7 +50,7 @@ export function SectionCard({
     >
       <div className="section-information">
         <div className="section-identity">
-          <Link className="section-code" href={`/sections/${section.id}`}>
+          <Link prefetch={false} className="section-code" href={`/sections/${section.id}`}>
             {course.code}
             <span>.{section.number}</span>
           </Link>
@@ -72,7 +72,11 @@ export function SectionCard({
           <Users size={15} />
           {faculty.length ? (
             faculty.map((f) => (
-              <Link key={f.id} href={`/faculty/${f.id}?semester=${section.semesterId}`}>
+              <Link
+                prefetch={false}
+                key={f.id}
+                href={`/faculty/${f.id}?semester=${section.semesterId}`}
+              >
                 <strong>{f.initials}</strong>
                 <span>{f.name}</span>
               </Link>
@@ -136,7 +140,7 @@ export function SectionCard({
         </div>
       )}
       <div className="section-card-footer">
-        <Link href={`/sections/${section.id}`} className="text-link">
+        <Link prefetch={false} href={`/sections/${section.id}`} className="text-link">
           View section <ArrowRight size={13} />
         </Link>
         {saved && (

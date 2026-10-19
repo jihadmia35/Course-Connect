@@ -1,13 +1,17 @@
 import { migrationNames } from '../scripts/migration-files';
 import { load } from 'cheerio';
-import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import { PrismaClient } from '@/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { importHtml } from '@/lib/importer';
 import { saveGroup } from '@/lib/groups';
+import { getCatalog, getFacultyCatalog } from '@/lib/catalog';
+import { runtimeDatabaseConfig } from '@/lib/database-config';
+vi.mock('@/lib/db', () => ({ db: () => client }));
 const html = readFileSync('tests/fixtures/advising.html', 'utf8'),
   adminId = '11111111-1111-4111-8111-111111111111';
 let engine: PGlite,
@@ -31,6 +35,7 @@ async function reconnectAfterConstraint() {
   client = makeClient();
 }
 beforeAll(async () => {
+  vi.stubEnv('DATABASE_URL', 'postgresql://disposable-test-only.invalid');
   engine = await PGlite.create();
   await engine.exec('CREATE ROLE anon; CREATE ROLE authenticated;');
   for (const name of migrationNames())
@@ -44,6 +49,7 @@ afterAll(async () => {
   await client?.$disconnect();
   await server?.stop();
   await engine?.close();
+  vi.unstubAllEnvs();
 });
 describe('PostgreSQL migration and core workflows', () => {
   it('inserts all advising data and preserves normalized relationships', async () => {
@@ -68,6 +74,69 @@ describe('PostgreSQL migration and core workflows', () => {
     });
     expect(await client.courseSection.count()).toBe(496);
     expect(await client.sectionSchedule.count()).toBe(796);
+  });
+  it('loads only the selected faculty’s courses and sections, preserving real profile counts', async () => {
+    const faculty = await client.faculty.findUniqueOrThrow({ where: { initials: 'FZC' } });
+    const profile = await getFacultyCatalog(faculty.id);
+    expect(profile.faculty.map((f) => f.initials)).toEqual(['FZC']);
+    expect(profile.faculty[0]).toMatchObject({ courses: 1, sections: 2 });
+    expect(profile.courses.map((c) => c.code)).toEqual(['ACT141']);
+    expect(profile.sections).toHaveLength(2);
+    expect(profile.sections.every((s) => s.facultyIds.includes(faculty.id))).toBe(true);
+    expect(profile.semesters.map((s) => s.id)).toContain(semesterId);
+    const directory = await getCatalog();
+    expect(directory.faculty).toHaveLength(122);
+    expect(directory.sections).toHaveLength(496);
+    expect(directory.faculty.find((f) => f.id === faculty.id)).toMatchObject({
+      courses: 1,
+      sections: 2,
+    });
+    expect((await getFacultyCatalog('nonexistent-faculty')).faculty).toHaveLength(0);
+  });
+  it('avoids the one-connection checkout timeout while another request holds a connection', async () => {
+    const connectionString = `postgresql://postgres:postgres@${server.getServerConn()}/postgres?sslmode=disable`;
+    const single = new Pool({ connectionString, max: 1, connectionTimeoutMillis: 100 });
+    const held = await single.connect();
+    try {
+      await expect(single.query('SELECT 1')).rejects.toThrow(
+        'timeout exceeded when trying to connect',
+      );
+    } finally {
+      held.release();
+      await single.end();
+    }
+    const shared = new Pool({
+      ...runtimeDatabaseConfig(connectionString, true),
+      connectionTimeoutMillis: 2000,
+    });
+    const occupied = await shared.connect();
+    try {
+      expect((await shared.query('SELECT 1 AS available')).rows[0].available).toBe(1);
+    } finally {
+      occupied.release();
+      await shared.end();
+    }
+  });
+  it('preserves co-teachers in a scoped faculty profile', async () => {
+    const faculty = await client.faculty.findUniqueOrThrow({ where: { initials: 'FZC' } });
+    const coTeacher = await client.faculty.create({
+      data: { initials: 'TESTCO', name: 'Synthetic test co-teacher' },
+    });
+    try {
+      await client.teachingAssignment.create({ data: { sectionId, facultyId: coTeacher.id } });
+      const profile = await getFacultyCatalog(faculty.id);
+      expect(profile.faculty.map((f) => f.id)).toEqual(
+        expect.arrayContaining([faculty.id, coTeacher.id]),
+      );
+      expect(profile.sections.find((s) => s.id === sectionId)?.facultyIds).toContain(coTeacher.id);
+      expect(profile.faculty.find((f) => f.id === faculty.id)).toMatchObject({
+        courses: 1,
+        sections: 2,
+      });
+    } finally {
+      await client.teachingAssignment.deleteMany({ where: { facultyId: coTeacher.id } });
+      await client.faculty.delete({ where: { id: coTeacher.id } });
+    }
   });
   it('updates changed rows and replaces meetings without touching other sections', async () => {
     const changed = html.replace('SUN # 08:30 ~ 09:50 @ SEU516', 'SUN # 08:30 ~ 09:50 @ TESTROOM');
@@ -150,6 +219,12 @@ describe('PostgreSQL migration and core workflows', () => {
       where: { semesterId: other.id },
     });
     expect(await client.messengerGroupLink.count({ where: { sectionId: section.id } })).toBe(0);
+    const facultyId = (
+      await client.teachingAssignment.findFirstOrThrow({ where: { sectionId: section.id } })
+    ).facultyId;
+    const profile = await getFacultyCatalog(facultyId);
+    expect(profile.sections.filter((s) => s.semesterId === semesterId)).toHaveLength(2);
+    expect(profile.sections.filter((s) => s.semesterId === other.id)).toHaveLength(1);
     await expect(
       saveGroup(client, {
         sectionId,

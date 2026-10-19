@@ -1,6 +1,19 @@
 # Verification — 19 October 2026
 
-Latest invite handling results are recorded below. The earlier [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md) records deployment setup and previous verification. Earlier test counts below are historical.
+Latest results are recorded below. The earlier [Vercel readiness audit — 20 October 2026](PRE_DEPLOYMENT_AUDIT.md) records deployment setup and previous verification. Earlier test counts below are historical.
+
+## Faculty profile timeout correction — 20 October 2026
+
+The owner supplied production errors reading `timeout exceeded when trying to connect`. The installed `pg-pool` source emits this message when a request times out waiting to check out a pooled client. The application had a one-client Vercel pool, while Fluid Compute can share that process between concurrent requests.
+
+- The runtime now shares up to five clients, keeps transaction pooling on Supabase port 6543, and registers the pool with Vercel’s official `attachDatabasePool` helper. Idle timeout is five seconds. Credentials, TLS validation, `DIRECT_URL`, and database state are unchanged.
+- Faculty profile queries filter courses, sections, and relevant teachers before loading. Counts derive from those sections. Co-teachers and assignments in other semesters remain available. The directory no longer fetches a second full set of faculty assignments solely for counts.
+- Database-backed navigation does not prefetch data as cards enter view or on hover. Profile footers show an opening indicator during delayed navigation; the profile route has a loading state and a specific retry/reload error screen.
+- A database-enforced **read-only transaction** through the actual Supabase transaction pooler verified the affected faculty’s scoped results against the full catalog. Its four section identities and meeting counts match. Serialized catalog data decreased from 193,057 bytes to 2,486 bytes (about 98.7%). These are catalog sizes, not complete HTML/JavaScript transfer sizes or a production load benchmark.
+- Local contention tests reproduce the exact checkout timeout with one client, then verify a second query succeeds while another connection is occupied under the current pool policy. Tests also verify singleton/lifecycle registration, scoped faculty data, co-teachers, and semester isolation.
+- TypeScript, lint, production compilation, and the production dependency audit pass. All 177 tests across 13 files pass. All 22 desktop/mobile browser scenarios pass, with four project-specific duplicates skipped. Browser coverage includes exact profile-footer clicks, delayed-navigation feedback, absence of background profile prefetches, direct profile URLs, reloads, mobile layouts, and the separate passing disposable-database submission/report workflow.
+- An exploratory JavaScript-disabled check stalls at the existing React streamed loading shell. Full use without JavaScript is unsupported; this change does not claim otherwise. Direct navigation and reload tests use a normal JavaScript-enabled browser.
+- No live database records, schema, Auth configuration, or Storage were changed. Apply the source changes by redeploying; no migration is required. Vercel lifecycle behavior and hosted concurrency still need verification after deployment under actual traffic.
 
 ## Native Messenger opening follow-up — 20 October 2026
 

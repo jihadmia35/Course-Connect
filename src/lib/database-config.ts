@@ -22,8 +22,10 @@ export function runtimeDatabaseConfig(
 
   return {
     connectionString: url.toString(),
-    max: onVercel ? 1 : 5,
+    // Fluid Compute runs concurrent requests in a warm instance. A one-client
+    // pool serializes every query and can time out while waiting for checkout.
+    max: 5,
     connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 10000,
+    idleTimeoutMillis: 5000,
   };
 }

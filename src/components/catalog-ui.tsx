@@ -4,6 +4,7 @@ import type { Catalog, FacultyView, SectionView } from '@/lib/types';
 import { GroupDialog, ReportDialog } from './group-form';
 import { InviteActions, InviteHelp } from './invite-actions';
 import { messengerLaunchUrl } from '@/lib/invite-url';
+import { ProfileLinkStatus } from './profile-link-status';
 export function Avatar({ faculty, large = false }: { faculty: FacultyView; large?: boolean }) {
   return (
     <span
@@ -36,7 +37,11 @@ export function FacultyCard({
   );
   const courses = catalog.courses.filter((c) => sections.some((s) => s.courseId === c.id));
   return (
-    <Link className="faculty-card" href={`/faculty/${faculty.id}?semester=${semester}`}>
+    <Link
+      prefetch={false}
+      className="faculty-card"
+      href={`/faculty/${faculty.id}?semester=${semester}`}
+    >
       <div className="faculty-card-top">
         <Avatar faculty={faculty} />
         <span className="initials-badge">{faculty.initials}</span>
@@ -63,9 +68,7 @@ export function FacultyCard({
           <b>{sections.length}</b> {sections.length === 1 ? 'section' : 'sections'}
         </span>
       </div>
-      <div className="card-action">
-        View faculty profile <ArrowUpRight size={16} />
-      </div>
+      <ProfileLinkStatus />
     </Link>
   );
 }

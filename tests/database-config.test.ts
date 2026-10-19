@@ -11,7 +11,8 @@ describe('serverless database connection policy', () => {
     const source = new URL(session);
     const runtime = new URL(config.connectionString!);
     expect(runtime.port).toBe('6543');
-    expect(config.max).toBe(1);
+    expect(config.max).toBe(5);
+    expect(config.idleTimeoutMillis).toBe(5000);
     expect(runtime.hostname).toBe(source.hostname);
     expect(runtime.username).toBe(source.username);
     expect(runtime.password).toBe(source.password);

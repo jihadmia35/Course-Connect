@@ -81,7 +81,8 @@ test('faculty profiles provide schedules and sharing without opening another pag
   await page.goto('/faculty');
   await page.getByRole('searchbox', { name: 'Search faculty' }).fill('FZC');
   await expect(page.locator('.faculty-card')).toHaveCount(1);
-  await page.locator('.faculty-card').click();
+  await page.locator('.faculty-card').getByText('View faculty profile', { exact: true }).click();
+  await expect(page).toHaveURL(/\/faculty\/FZC\?semester=source$/);
   await expect(page.getByRole('heading', { name: 'Dr. Faieza Chowdhury' })).toBeVisible();
   await expect(page.locator('.section-card')).toHaveCount(2);
   await expect(page.getByText('SEU516', { exact: true }).first()).toBeVisible();
@@ -91,6 +92,58 @@ test('faculty profiles provide schedules and sharing without opening another pag
     .getByRole('button', { name: 'Add group link' })
     .click();
   await expect(page.getByRole('dialog').locator('.selected-class')).toContainText('ACT141.1');
+});
+test('profile clicks show progress while navigation waits and do not prefetch other profiles', async ({
+  page,
+}, info) => {
+  const prefetched: string[] = [];
+  page.on('request', (request) => {
+    if (
+      /\/faculty\/[^/?]+/.test(new URL(request.url()).pathname) &&
+      request.headers()['next-router-prefetch']
+    )
+      prefetched.push(request.url());
+  });
+  await page.goto('/faculty');
+  await page.getByRole('searchbox', { name: 'Search faculty' }).fill('FZC');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/faculty/FZC?*', async (route) => {
+    if (route.request().headers()['rsc'] === '1') await gate;
+    await route.continue();
+  });
+  try {
+    await page.locator('.faculty-card').getByText('View faculty profile', { exact: true }).click();
+    await expect(page.getByText('Opening profile…', { exact: true })).toBeVisible();
+    await page.screenshot({ path: `test-results/${info.project.name}-faculty-opening.png` });
+    expect(prefetched).toEqual([]);
+    release();
+    await expect(
+      page.getByRole('heading', { name: 'Dr. Faieza Chowdhury', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.section-card')).toHaveCount(2);
+    await page.screenshot({ path: `test-results/${info.project.name}-faculty-profile.png` });
+  } finally {
+    release();
+  }
+});
+test('faculty profiles open directly and survive a full reload', async ({ page, baseURL }) => {
+  await page.goto('/faculty');
+  const href = await page.locator('.faculty-card').first().getAttribute('href');
+  expect(href).toMatch(/^\/faculty\/ANMM\?semester=source$/);
+  await page.goto(baseURL + href!);
+  await expect(
+    page.getByRole('heading', { name: 'A N M Zahid Hossain Milkan', exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'A N M Zahid Hossain Milkan', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Assigned courses & sections', exact: true }),
+  ).toBeVisible();
 });
 test('empty results recover and mobile destinations are directly accessible', async ({
   page,
