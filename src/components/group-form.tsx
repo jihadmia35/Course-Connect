@@ -1,4 +1,5 @@
 'use client';
+import { notifyCatalogChanged } from '@/lib/catalog-events';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -157,6 +158,7 @@ export function GroupForm({
       }
       toast.success('Your group link has been shared.');
       setSuccess(true);
+      notifyCatalogChanged();
       router.refresh();
       onSuccess?.();
     } catch (e) {

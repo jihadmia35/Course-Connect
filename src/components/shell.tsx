@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import { CatalogRefresh } from './catalog-refresh';
 import {
   BookOpen,
   Users,
@@ -139,6 +140,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className={`app-shell ${isLogin ? 'auth-shell' : ''} ${isAdmin ? 'admin-shell' : ''}`}>
       <ViewportSync />
+      <CatalogRefresh />
       <a className="skip-link" href="#main">
         Skip to content
       </a>

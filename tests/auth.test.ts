@@ -9,7 +9,8 @@ vi.mock('@/lib/db', () => ({
     faculty: { create: mocks.write, delete: mocks.write },
   }),
 }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
+import { updateTag, revalidatePath } from 'next/cache';
 import { currentAdmin, requireAdmin } from '@/lib/auth';
 import { saveRecord, deleteRecord, runImport, uploadPhoto } from '@/app/admin/actions';
 beforeEach(() => {
@@ -53,5 +54,7 @@ describe('server administrator authorization', () => {
         message: 'Administrator authorization required.',
       });
     expect(mocks.write).not.toHaveBeenCalled();
+    expect(updateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

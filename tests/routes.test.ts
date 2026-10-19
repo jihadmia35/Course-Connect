@@ -15,6 +15,9 @@ vi.mock('@/lib/security', async (importOriginal) => ({
   rateLimit: mocks.rateLimit,
 }));
 vi.mock('@/lib/groups', () => ({ saveGroup: mocks.saveGroup }));
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), revalidatePath: vi.fn() }));
+import { revalidateTag, revalidatePath } from 'next/cache';
+import { CATALOG_CACHE_TAG } from '@/lib/catalog-cache';
 import { POST as groupPost } from '@/app/api/groups/route';
 import { POST as reportPost } from '@/app/api/reports/route';
 import { GET as challengeGet } from '@/app/api/challenge/route';
@@ -140,6 +143,26 @@ describe('public HTTP boundaries without live database access', () => {
       undefined,
       expect.objectContaining({ url: 'https://m.me/j/ExpandedInvite' }),
     );
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+  it('expires all public views immediately after a successful group insertion', async () => {
+    mocks.resolve.mockResolvedValue('https://m.me/j/RouteTestInvite');
+    mocks.saveGroup.mockImplementation(async () => {
+      expect(revalidateTag).not.toHaveBeenCalled();
+      return { status: 'created', group: { id: 'new' } };
+    });
+    expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(201);
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(CATALOG_CACHE_TAG, { expire: 0 });
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+  });
+  it('does not flush public caches for a duplicate or failed transaction', async () => {
+    mocks.resolve.mockResolvedValue('https://m.me/j/RouteTestInvite');
+    mocks.saveGroup.mockResolvedValue({ status: 'duplicate' });
+    expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(200);
+    mocks.saveGroup.mockRejectedValue(new Error('Synthetic rollback'));
+    expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(400);
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
   it('returns a safe expansion error without attempting persistence', async () => {
     mocks.resolve.mockRejectedValue(

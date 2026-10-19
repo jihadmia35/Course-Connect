@@ -1,4 +1,5 @@
 'use client';
+import { notifyCatalogChanged } from '@/lib/catalog-events';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, type InputHTMLAttributes } from 'react';
@@ -175,6 +176,7 @@ export function AdminManager({
       }
       toast.success(result.message);
       setEdit(false);
+      notifyCatalogChanged();
       router.refresh();
     } catch {
       setError('Unable to save. Please try again.');
@@ -194,6 +196,7 @@ export function AdminManager({
       }
       toast.success(result.message);
       setRemove(null);
+      notifyCatalogChanged();
       router.refresh();
     } catch {
       setError('Unable to remove this record.');
@@ -599,6 +602,7 @@ function PhotoForm({ facultyId, photoUrl }: { facultyId: string; photoUrl: strin
           const result = await uploadPhoto(facultyId, form);
           if (result.ok) {
             toast.success(result.message);
+            notifyCatalogChanged();
             router.refresh();
           } else setError(result.message);
         } catch {
@@ -679,6 +683,7 @@ export function ImportPanel({
             if (result.ok) {
               setSummary(result.summary);
               toast.success(result.message);
+              notifyCatalogChanged();
               router.refresh();
             } else setError(result.message);
           } catch {

@@ -12,6 +12,10 @@ import { saveGroup } from '@/lib/groups';
 import { getCatalog, getFacultyCatalog } from '@/lib/catalog';
 import { runtimeDatabaseConfig } from '@/lib/database-config';
 vi.mock('@/lib/db', () => ({ db: () => client }));
+// These tests deliberately mutate SQL directly; exercise fresh relational reads.
+vi.mock('next/cache', () => ({
+  unstable_cache: (callback: (...args: unknown[]) => unknown) => callback,
+}));
 const html = readFileSync('tests/fixtures/advising.html', 'utf8'),
   adminId = '11111111-1111-4111-8111-111111111111';
 let engine: PGlite,

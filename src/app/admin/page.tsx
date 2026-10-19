@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { getCatalog } from '@/lib/catalog';
+import { getAdminCatalog } from '@/lib/catalog';
 import { requireAdminPage } from '@/lib/auth';
 import { db } from '@/lib/db';
 export default async function AdminOverview() {
   await requireAdminPage();
-  const data = await getCatalog(),
+  const data = await getAdminCatalog(),
     reports = await db().groupReport.count({ where: { resolved: false } }),
     imports = await db().importHistory.findMany({
       take: 5,

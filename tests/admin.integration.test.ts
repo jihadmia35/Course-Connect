@@ -10,8 +10,58 @@ vi.mock('@/lib/db', () => ({ db: () => state.client! }));
 vi.mock('@/lib/auth', () => ({
   requireAdmin: async () => ({ id: '11111111-1111-4111-8111-111111111111' }),
 }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-import { saveRecord, deleteRecord, uploadPhoto } from '@/app/admin/actions';
+vi.mock('next/cache', async () => ({ ...(await import('./helpers/next-cache')).nextCache }));
+const storage = vi.hoisted(() => ({ upload: vi.fn(), remove: vi.fn() }));
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({ storage: { from: () => storage } }),
+}));
+import sharp from 'sharp';
+import { load } from 'cheerio';
+import {
+  saveRecord as persistRecord,
+  deleteRecord as removeRecord,
+  uploadPhoto as persistPhoto,
+  runImport as persistImport,
+} from '@/app/admin/actions';
+import { getCatalog, getFacultyCatalog, getAdminCatalog } from '@/lib/catalog';
+import { clearDataCache, nextCache } from './helpers/next-cache';
+import { CATALOG_CACHE_TAG } from '@/lib/catalog-cache';
+
+// Warm both directory and profile entries before EVERY mutation, then compare
+// their next reads with fresh SQL. Covers all CRUD branches, imports and photos.
+async function checkMutation(operation: () => ReturnType<typeof persistRecord>) {
+  clearDataCache(); // Isolate raw SQL fixture setup from application writes.
+  const before = await getCatalog();
+  const facultyIds = before.faculty.map((f) => f.id);
+  for (const id of facultyIds) await getFacultyCatalog(id);
+  const calls = nextCache.updateTag.mock.calls.length;
+  const result = await operation();
+  expect(nextCache.updateTag.mock.calls.length - calls).toBe(result.ok ? 1 : 0);
+  if (result.ok) expect(nextCache.updateTag).toHaveBeenLastCalledWith(CATALOG_CACHE_TAG);
+  const fresh = await getAdminCatalog();
+  expect(await getCatalog()).toEqual(fresh);
+  for (const id of facultyIds) {
+    const profile = await getFacultyCatalog(id);
+    expect(profile.sections).toEqual(fresh.sections.filter((s) => s.facultyIds.includes(id)));
+    expect(profile.faculty.find((f) => f.id === id)?.name).toBe(
+      fresh.faculty.find((f) => f.id === id)?.name,
+    );
+    expect(profile.notice).toBe(fresh.notice);
+    expect(profile.submissionsEnabled).toBe(fresh.submissionsEnabled);
+    expect(profile.faculty.find((f) => f.id === id)?.photoUrl).toBe(
+      fresh.faculty.find((f) => f.id === id)?.photoUrl,
+    );
+  }
+  return result;
+}
+const saveRecord = (...args: Parameters<typeof persistRecord>) =>
+  checkMutation(() => persistRecord(...args));
+const deleteRecord = (...args: Parameters<typeof removeRecord>) =>
+  checkMutation(() => removeRecord(...args));
+const uploadPhoto = (...args: Parameters<typeof persistPhoto>) =>
+  checkMutation(() => persistPhoto(...args));
+const runImport = (...args: Parameters<typeof persistImport>) =>
+  checkMutation(() => persistImport(...args));
 let engine: PGlite,
   server: PGLiteSocketServer,
   departmentId: string,
@@ -31,6 +81,9 @@ function form(values: Record<string, string | boolean | string[]>) {
   return data;
 }
 beforeAll(async () => {
+  vi.stubEnv('DATABASE_URL', 'postgresql://disposable-test-only.invalid');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://not-a-real-project.invalid');
+  vi.stubEnv('SUPABASE_SECRET_KEY', 'local-test-only');
   engine = await PGlite.create();
   for (const name of migrationNames())
     await engine.exec(readFileSync(`prisma/migrations/${name}/migration.sql`, 'utf8'));
@@ -219,6 +272,81 @@ describe('authorized admin operations with real PostgreSQL persistence', () => {
       ok: false,
       message: 'The image content does not match its file type.',
     });
+  });
+  it('refreshes names, courses, departments, schedules and derived profile counts after edits', async () => {
+    expect(
+      await saveRecord(
+        'faculty',
+        facultyId,
+        form({ initials: 'FZC', name: 'Edited local test name', departmentId }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await saveRecord(
+        'departments',
+        departmentId,
+        form({ code: 'TEST', name: 'Edited test department' }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await saveRecord(
+        'courses',
+        courseId,
+        form({ code: 'ACT141', title: 'Edited local test title', credits: '3', departmentId }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await saveRecord(
+        'sections',
+        sectionId,
+        form({
+          courseId,
+          semesterId,
+          number: '1',
+          availableSeats: '16',
+          facultyIds: [],
+          schedules: 'MON 10:00 11:20 TEST101',
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect((await getFacultyCatalog(facultyId)).sections).toHaveLength(0);
+  });
+  it('refreshes replaced photo URLs even if removing the old Storage object fails', async () => {
+    storage.upload.mockResolvedValue({ error: null });
+    storage.remove.mockRejectedValue(new Error('Synthetic cleanup outage'));
+    const image = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } })
+      .png()
+      .toBuffer();
+    const data = new FormData();
+    data.set('photo', new File([new Uint8Array(image)], 'test.png', { type: 'image/png' }));
+    expect(await uploadPhoto(facultyId, data)).toMatchObject({ ok: true });
+    const first = (await getCatalog()).faculty.find((f) => f.id === facultyId)!.photoUrl;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await uploadPhoto(facultyId, data)).toMatchObject({ ok: true });
+      const second = (await getCatalog()).faculty.find((f) => f.id === facultyId)!.photoUrl;
+      expect(second).not.toBe(first);
+      expect(second).toMatch(/faculty-photos\/.+\.webp$/);
+      expect(storage.remove).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith('Previous faculty photo cleanup failed');
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('expires cached assignments, names, meetings and courses after a web HTML import', async () => {
+    const $ = load(readFileSync('tests/fixtures/advising.html', 'utf8'));
+    const row = $('.ums-grid-offered-section').first().prop('outerHTML')!;
+    const data = new FormData();
+    data.set('semesterId', semesterId);
+    data.set('html', new File([row], 'cache-test.html', { type: 'text/html' }));
+    expect(await runImport(data)).toMatchObject({ ok: true, summary: { updated: 1 } });
+    const profile = await getFacultyCatalog(facultyId);
+    expect(profile.sections).toHaveLength(1);
+    expect(profile.faculty[0]?.name).toBe('Dr. Faieza Chowdhury');
+    expect(profile.courses[0]?.title).toBe('Introduction to Accounting');
+    expect(profile.sections[0]?.groups).toHaveLength(1);
+    // Remove the disposable audit row to allow the final semester deletion test.
+    await state.client!.importHistory.deleteMany();
   });
   it('removes groups and their reports explicitly, then removes unreferenced records', async () => {
     expect(await deleteRecord('groups', groupId)).toMatchObject({ ok: true });

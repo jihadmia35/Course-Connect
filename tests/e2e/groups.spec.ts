@@ -19,6 +19,11 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
   await expect(page.locator('.section-card')).toHaveCount(1);
+  // Warm a separate scoped profile cache before submitting to the full directory.
+  const profileHref = await page.locator('.section-faculty a').first().getAttribute('href');
+  const profile = await page.context().newPage();
+  await profile.goto(profileHref!);
+  await expect(profile.locator('.inline-group')).toHaveCount(0);
   await page.getByRole('button', { name: 'Add group link' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('.selected-class')).toContainText('ACT141.1');
@@ -54,6 +59,8 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   }
   await share('www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite');
   await expect(page.locator('.inline-group')).toHaveCount(1);
+  await profile.reload();
+  await expect(profile.locator('.inline-group')).toHaveCount(1);
   await expect(page.locator('.inline-group a')).toHaveAttribute(
     'href',
     'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
@@ -110,6 +117,9 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await page.screenshot({ path: 'test-results-db/existing-warning.png' });
   await page.getByRole('button', { name: 'Submit Anyway', exact: true }).click();
   await expect(page.locator('.group-row')).toHaveCount(2);
+  await profile.reload();
+  await expect(profile.locator('.inline-group')).toHaveCount(2);
+  await profile.close();
   await share(
     'https://www.m.me/j/SecondTestInvite/?send_source=gc%3Acopy_invite&utm_source=equivalent',
   );

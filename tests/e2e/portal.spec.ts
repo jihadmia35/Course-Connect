@@ -1,4 +1,54 @@
 import { test, expect } from '@playwright/test';
+import { CATALOG_CHANGE_EVENT } from '../../src/lib/catalog-events';
+
+test('open directory tabs refresh after edits elsewhere and keep search filters', async ({
+  page,
+  context,
+}) => {
+  await page.clock.install();
+  await page.goto('/faculty');
+  const search = page.getByRole('searchbox', { name: 'Search faculty' });
+  await search.fill('FZC');
+  await search.blur();
+  await expect(page.locator('.faculty-card')).toHaveCount(1);
+  await page.clock.fastForward(6000);
+  const otherTab = await context.newPage();
+  await otherTab.goto('/about');
+  const refreshed = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/faculty' &&
+      response.request().headers()['rsc'] === '1',
+  );
+  await otherTab.evaluate(
+    (key) => localStorage.setItem(key, String(Date.now())),
+    CATALOG_CHANGE_EVENT,
+  );
+  await refreshed;
+  await expect(search).toHaveValue('FZC');
+  await expect(page.locator('.faculty-card')).toHaveCount(1);
+  await otherTab.close();
+});
+
+test('visible pages refresh periodically while open forms keep their input', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/faculty');
+  const refreshed = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/faculty' &&
+      response.request().headers()['rsc'] === '1',
+  );
+  await page.clock.fastForward(60_000);
+  await refreshed;
+  const search = page.getByRole('searchbox', { name: 'Search faculty' });
+  await search.fill('FZC');
+  let refreshes = 0;
+  page.on('request', (request) => {
+    if (request.headers()['rsc'] === '1') refreshes++;
+  });
+  await page.clock.fastForward(60_000);
+  await expect(search).toHaveValue('FZC');
+  expect(refreshes).toBe(0);
+});
 const fits = async (page: import('@playwright/test').Page) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,

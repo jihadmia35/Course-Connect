@@ -57,7 +57,12 @@ function BrowseDirectory({
   const [query, setQuery] = useState(
     typeof initialQuery === 'string' ? initialQuery.slice(0, 100) : '',
   );
-  const [semester, setSemester] = useState(initialSemester ?? catalog.semesters[0]?.id ?? '');
+  const [selectedSemester, setSemester] = useState(
+    initialSemester ?? catalog.semesters[0]?.id ?? '',
+  );
+  const semester = catalog.semesters.some((s) => s.id === selectedSemester)
+    ? selectedSemester
+    : (catalog.semesters[0]?.id ?? '');
   const [area, setArea] = useState('');
   const [sort, setSort] = useState('name');
   const [limit, setLimit] = useState(12);

@@ -1,6 +1,6 @@
 'use server';
 import { z } from 'zod';
-import { revalidatePath } from 'next/cache';
+import { invalidateCatalogAction } from '@/lib/catalog-cache';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { createClient } from '@supabase/supabase-js';
@@ -216,7 +216,7 @@ export async function saveRecord(
         update: data,
       });
     } else throw new Error('Unknown entity');
-    revalidatePath('/', 'layout');
+    invalidateCatalogAction();
     return { ok: true, message: 'Changes saved.' };
   } catch (error) {
     return failure(error);
@@ -252,7 +252,7 @@ export async function deleteRecord(entity: string, id: string): Promise<Mutation
       default:
         throw new Error('Unsupported deletion');
     }
-    revalidatePath('/', 'layout');
+    invalidateCatalogAction();
     return { ok: true, message: 'Record removed.' };
   } catch (error) {
     return failure(error);
@@ -313,8 +313,17 @@ export async function uploadPhoto(facultyId: string, form: FormData): Promise<Mu
       await storage.remove([path]);
       throw error;
     }
-    if (faculty.photoPath) await storage.remove([faculty.photoPath]);
-    revalidatePath('/', 'layout');
+    invalidateCatalogAction();
+    if (faculty.photoPath) {
+      try {
+        const cleanup = await storage.remove([faculty.photoPath]);
+        if (cleanup.error) console.error('Previous faculty photo cleanup failed');
+      } catch {
+        // The new photo is already committed and visible. Cleanup must not turn
+        // a successful update into an error or prevent cache invalidation.
+        console.error('Previous faculty photo cleanup failed');
+      }
+    }
     return { ok: true, message: 'Faculty photo updated.' };
   } catch (error) {
     return failure(error);
@@ -339,7 +348,7 @@ export async function runImport(form: FormData): Promise<MutationResult> {
       admin.id,
       file.name.replace(/[^\w. -]/g, '').slice(0, 150),
     );
-    revalidatePath('/', 'layout');
+    invalidateCatalogAction();
     return { ok: true, message: 'Import completed.', summary };
   } catch (error) {
     return failure(error);

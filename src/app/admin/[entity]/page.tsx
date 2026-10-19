@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getCatalog } from '@/lib/catalog';
+import { getAdminCatalog } from '@/lib/catalog';
 import { db } from '@/lib/db';
 import { requireAdminPage } from '@/lib/auth';
 import { AdminManager, ImportPanel } from '@/components/admin-manager';
@@ -21,7 +21,7 @@ export default async function AdminEntity({ params }: { params: Promise<{ entity
     ].includes(entity)
   )
     notFound();
-  const catalog = await getCatalog();
+  const catalog = await getAdminCatalog();
   if (entity === 'imports') {
     const history = await db().importHistory.findMany({
       take: 30,

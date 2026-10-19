@@ -1,9 +1,15 @@
 import 'server-only';
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import snapshot from '../../data/advising-snapshot.json';
 import type { Catalog, SourceRow, FacultyView } from './types';
 import { db } from './db';
 import { uniqueMeetings } from './meetings';
+import {
+  CATALOG_CACHE_TAG,
+  CATALOG_REVALIDATE_SECONDS,
+  catalogCacheNamespace,
+} from './catalog-cache';
 function preview(): Catalog {
   const rows = snapshot.rows as SourceRow[];
   const courseMap = new Map(
@@ -154,5 +160,16 @@ async function readCatalog(facultyId?: string): Promise<Catalog> {
     })),
   };
 }
-export const getCatalog = cache(() => readCatalog());
-export const getFacultyCatalog = cache((facultyId: string) => readCatalog(facultyId));
+async function readPublicCatalog(facultyId?: string): Promise<Catalog> {
+  if (!process.env.DATABASE_URL) return readCatalog(facultyId);
+  return unstable_cache(readCatalog, ['catalog-v1', catalogCacheNamespace()], {
+    tags: [CATALOG_CACHE_TAG],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  })(facultyId);
+}
+
+// React cache coalesces repeated calls within a render; Next's Data Cache shares
+// public results across requests. Authentication and mutation checks bypass both.
+export const getCatalog = cache(() => readPublicCatalog());
+export const getFacultyCatalog = cache((facultyId: string) => readPublicCatalog(facultyId));
+export const getAdminCatalog = cache(() => readCatalog());

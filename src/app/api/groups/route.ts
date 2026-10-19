@@ -4,6 +4,7 @@ import { assertOrigin, rateLimit, verifyToken, publicError, readJsonBody } from 
 import { saveGroup } from '@/lib/groups';
 import { db } from '@/lib/db';
 import { InviteResolutionError, resolveMessengerInvite } from '@/lib/resolve-invite';
+import { invalidateCatalogRoute } from '@/lib/catalog-cache';
 export async function POST(request: Request) {
   try {
     assertOrigin(request);
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     await rateLimit(request.headers, 'groups');
     const resolvedUrl = await resolveMessengerInvite(input.data.url);
     const result = await saveGroup(db(), { ...input.data, url: resolvedUrl });
+    if (result.status === 'created') invalidateCatalogRoute();
     return NextResponse.json(
       { ...result, resolvedUrl },
       { status: result.status === 'created' ? 201 : 200 },
