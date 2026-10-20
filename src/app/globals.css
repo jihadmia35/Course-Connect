@@ -723,6 +723,42 @@ main {
 .scope-switch button:not(.active) > .scope-count {
   background: #eff2eb;
 }
+.scope-switch button.group-scope {
+  color: #75480d;
+  background: #fff2d7;
+  border-color: #e9c98b;
+  font-size: 13px;
+  font-weight: 750;
+  box-shadow: 0 1px 3px #75480d12;
+}
+.scope-switch button.group-scope > svg {
+  flex-shrink: 0;
+}
+.scope-switch button.group-scope > .scope-count {
+  color: #704610;
+  background: #f1d89f;
+  font-weight: 750;
+}
+@media (hover: hover) {
+  .scope-switch button.group-scope:hover {
+    background: #ffe7b2;
+    border-color: #d7ad60;
+  }
+}
+.scope-switch button.group-scope.active {
+  color: #fff;
+  background: #1e634b;
+  border-color: #1e634b;
+  box-shadow: 0 2px 5px #1e634b26;
+}
+.scope-switch button.group-scope.active > .scope-count {
+  color: #fff;
+  background: #ffffff26;
+}
+.scope-switch button.group-scope:focus-visible {
+  outline: 3px solid #1e634b;
+  outline-offset: 3px;
+}
 .availability-dot {
   width: 5px;
   height: 5px;

@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Zap,
   Plus,
+  Check,
 } from 'lucide-react';
 import type { Catalog } from '@/lib/types';
 import { findSections } from '@/lib/section-search';
@@ -246,14 +247,19 @@ export function CourseFinder({
               </span>
             </button>
             <button
-              className={withGroups ? 'active' : ''}
+              className={`group-scope ${withGroups ? 'active' : ''}`}
               aria-pressed={withGroups}
+              title="Show sections with shared Messenger invites"
               onClick={() => {
                 setWithGroups(true);
                 setLimit(8);
               }}
             >
-              <span className="availability-dot" />
+              {withGroups ? (
+                <Check size={17} strokeWidth={2.5} aria-hidden="true" />
+              ) : (
+                <MessageCircle size={17} strokeWidth={2.2} aria-hidden="true" />
+              )}
               With groups
               <span className="scope-count">
                 {onlySaved ? saved.filter((s) => s.groups.length).length : groupsCount}
