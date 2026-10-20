@@ -32,6 +32,12 @@ test('open directory tabs refresh after edits elsewhere and keep search filters'
 test('visible pages refresh periodically while open forms keep their input', async ({ page }) => {
   await page.clock.install();
   await page.goto('/faculty');
+  // An actual filter interaction confirms hydration/effect registration before
+  // advancing the browser clock past the first refresh interval.
+  const search = page.getByRole('searchbox', { name: 'Search faculty' });
+  await search.fill('FZC');
+  await expect(page.locator('.faculty-card')).toHaveCount(1);
+  await search.blur();
   const refreshed = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === '/faculty' &&
@@ -39,7 +45,6 @@ test('visible pages refresh periodically while open forms keep their input', asy
   );
   await page.clock.fastForward(60_000);
   await refreshed;
-  const search = page.getByRole('searchbox', { name: 'Search faculty' });
   await search.fill('FZC');
   let refreshes = 0;
   page.on('request', (request) => {

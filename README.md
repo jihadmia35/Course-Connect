@@ -99,6 +99,8 @@ Admin routes under `/admin` cover overview, faculty/photos, courses, departments
 
 Semester-specific course/section counts are derived from teaching assignments. Multiple faculty and meetings are supported per section. Times use Asia/Dhaka. A course prefix filter is labeled **course area**, not department, because the source does not establish department membership.
 
+Public data uses a shared server cache with a five-minute revalidation fallback. Faculty profiles derive their relevant data from that same cache, so visiting a new profile does not create another SQL workload. Successful admin writes, photo replacements, web imports, and new student groups immediately expire the shared data. Admin views and security checks always read current data. Open pages refresh on focus, across browser tabs after edits, and once a minute while visible and not editing. Concurrent cache misses share SQL work within a warm instance. See [caching and freshness](docs/CACHING.md), including the distinction between app writes and trusted CLI/SQL changes. Vercel functions are configured in Singapore to match the supplied database region.
+
 ## Messenger and abuse controls
 
 These Messenger group invite formats are supported (including `www` and the mobile Messenger host):
@@ -132,11 +134,14 @@ npm run build
 PLAYWRIGHT_BROWSERS_PATH=/tmp/seu-playwright npx playwright install chromium
 PLAYWRIGHT_BROWSERS_PATH=/tmp/seu-playwright npm run test:e2e
 PLAYWRIGHT_BROWSERS_PATH=/tmp/seu-playwright npm run test:e2e:db
+npm run test:cache
 ```
 
 `npm test` runs parser, validation, actual server authorization, and integration tests. Integration tests boot an ephemeral **PGlite PostgreSQL WASM engine**, apply the committed SQL, and use the real Prisma `pg` adapter through a local socket. No Supabase credentials or production database is used. They cover relationships, import idempotency and updates, duplicate links, warning/Submit Anyway, semester isolation, safe deletion, paused submissions, and RLS. PGlite is only a test dependency. Its connection model is not equivalent to production multi-session PostgreSQL; stage concurrency/load tests against Supabase before a public launch.
 
 `db:verify` runs the actual Prisma `migrate deploy` CLI twice against a fresh temporary PostgreSQL-compatible engine and checks `migrate status`. Browser tests cover real navigation, profiles, sections, search, empty states, disabled preview submissions, admin redirects, mobile navigation, and layout overflow. Tests that require live Supabase Auth/Storage must be completed with your project credentials. `test:e2e:db` also exercises actual browser-to-Route-Handler-to-Prisma writes against a disposable database: first invite, warning, Submit Anyway, normalized duplicate rejection, reporting, and the rate limit. These invites are synthetic local test data; no request is sent to Messenger. Admin integration tests exercise real CRUD persistence with a test-only authenticated identity; separate authorization tests cover the real role-checking code. No external-service verification is implied by passing local tests.
+
+After a production build, `test:cache` starts an isolated server on port 3004 and creates only disposable test data. It warms the directory, shuts down its test database, then verifies 30 fresh requests to previously unseen faculty URLs and course/faculty directories still succeed through the real Next Data Cache. It does not read local Supabase credentials or use a browser cache. Stop any unrelated service on that test port before running it.
 
 For an enforced read-only inspection of existing Supabase data/configuration, run `npm run check:deployment`. It does not run migrations, import data, sign in, or create the Storage bucket. See the current [pre-deployment audit](docs/PRE_DEPLOYMENT_AUDIT.md).
 

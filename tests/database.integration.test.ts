@@ -79,7 +79,7 @@ describe('PostgreSQL migration and core workflows', () => {
     expect(await client.courseSection.count()).toBe(496);
     expect(await client.sectionSchedule.count()).toBe(796);
   });
-  it('loads only the selected faculty’s courses and sections, preserving real profile counts', async () => {
+  it('returns only the selected faculty’s courses and sections, preserving real profile counts', async () => {
     const faculty = await client.faculty.findUniqueOrThrow({ where: { initials: 'FZC' } });
     const profile = await getFacultyCatalog(faculty.id);
     expect(profile.faculty.map((f) => f.initials)).toEqual(['FZC']);

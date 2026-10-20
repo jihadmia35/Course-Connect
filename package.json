@@ -25,6 +25,7 @@
     "postinstall": "prisma generate",
     "db:verify": "tsx scripts/verify-migrations.ts",
     "test:e2e:db": "tsx scripts/e2e-db.ts",
+    "test:cache": "tsx scripts/verify-cache.ts",
     "data:verify": "tsx scripts/verify-import.ts",
     "check:deployment": "tsx scripts/check-deployment.ts"
   },

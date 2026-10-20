@@ -18,6 +18,8 @@ The runtime database role must have the required server-side privileges. With th
 4. Deploy. Add the canonical domain to Supabase Auth Site URL and configure allowed URLs if you later add callback-based authentication. No `APP_URL` setting is needed. Preview deployments should use staging Supabase configuration if they accept writes. An explicit `APP_URL` remains an optional override for a custom reverse proxy; do not copy a localhost value to Vercel.
 5. Complete the live-service checklist below. Invite students only after a real semester is selected and the intended source imported.
 
+The committed `vercel.json` selects Singapore (`sin1`) because the supplied Supabase endpoint is in `ap-southeast-1`. Confirm the new deployment's Functions use this region; update the file if you move the database. Public directory results now use shared server caching and expire after successful app writes. New visitors use the same server cache as returning visitors. See [caching and freshness](CACHING.md) for invalidation, open-tab refresh behavior, and out-of-band SQL/CLI changes. Applying these changes requires a source redeployment, with no schema migration or data import.
+
 Imports may take longer than ordinary page requests. Use a Vercel function duration compatible with your plan for `/admin/[entity]` (the route declares `maxDuration = 120`). The web importer limits files to 3 MB so multipart overhead stays below Vercel's request payload cap. The CLI parser supports 5 MB documents and can be used from a trusted workstation for larger saved pages. The supplied original is about 1.84 MB. Photo uploads stay under 2 MB input.
 
 ## Live-service acceptance checks

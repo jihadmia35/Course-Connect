@@ -19,7 +19,7 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
   await expect(page.locator('.section-card')).toHaveCount(1);
-  // Warm a separate scoped profile cache before submitting to the full directory.
+  // Open a profile first to verify it sees later writes to the shared catalog.
   const profileHref = await page.locator('.section-faculty a').first().getAttribute('href');
   const profile = await page.context().newPage();
   await profile.goto(profileHref!);

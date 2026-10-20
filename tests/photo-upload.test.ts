@@ -13,7 +13,8 @@ vi.mock('@/lib/auth', () => ({ requireAdmin: mocks.authorize }));
 vi.mock('@/lib/db', () => ({
   db: () => ({ faculty: { findUniqueOrThrow: mocks.findFaculty, update: mocks.updateFaculty } }),
 }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
+import { updateTag } from 'next/cache';
 vi.mock('@supabase/supabase-js', () => ({ createClient: mocks.createClient }));
 import { uploadPhoto } from '@/app/admin/actions';
 function form(bytes: Uint8Array, type = 'image/png') {
@@ -68,12 +69,14 @@ describe('faculty photo safety and replacement without external writes', () => {
     expect(mocks.updateFaculty.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.remove.mock.invocationCallOrder[0],
     );
+    expect(updateTag).toHaveBeenCalledTimes(1);
   });
   it('cleans up the new upload if the database path update fails, preserving the old photo', async () => {
     mocks.updateFaculty.mockRejectedValue(new Error('simulated persistence failure'));
     expect(await uploadPhoto('test-faculty', form(await image()))).toMatchObject({ ok: false });
     expect(mocks.remove).toHaveBeenCalledExactlyOnceWith([mocks.upload.mock.calls[0][0]]);
     expect(mocks.remove).not.toHaveBeenCalledWith(['test-faculty/old.webp']);
+    expect(updateTag).not.toHaveBeenCalled();
   });
   it('does not change the faculty record when Storage rejects the upload', async () => {
     mocks.upload.mockResolvedValue({ error: new Error('simulated storage failure') });

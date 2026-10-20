@@ -26,6 +26,9 @@ export const nextCache = {
       },
   ),
   updateTag: vi.fn(expire),
-  revalidateTag: vi.fn((tag: string, _profile?: unknown) => expire(tag)),
+  revalidateTag: vi.fn((tag: string, profile?: unknown) => {
+    void profile;
+    expire(tag);
+  }),
   revalidatePath: vi.fn(),
 };

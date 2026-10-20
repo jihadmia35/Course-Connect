@@ -27,7 +27,7 @@ import { getCatalog, getFacultyCatalog, getAdminCatalog } from '@/lib/catalog';
 import { clearDataCache, nextCache } from './helpers/next-cache';
 import { CATALOG_CACHE_TAG } from '@/lib/catalog-cache';
 
-// Warm both directory and profile entries before EVERY mutation, then compare
+// Warm directory and profile views before EVERY mutation, then compare
 // their next reads with fresh SQL. Covers all CRUD branches, imports and photos.
 async function checkMutation(operation: () => ReturnType<typeof persistRecord>) {
   clearDataCache(); // Isolate raw SQL fixture setup from application writes.

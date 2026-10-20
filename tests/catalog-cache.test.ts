@@ -34,7 +34,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('shared public catalog cache', () => {
-  it('reuses reads across requests and isolates each faculty profile from the directory', async () => {
+  it('coalesces simultaneous cold public requests into one database load', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 50 }, (_, i) =>
+        i % 2 ? getFacultyCatalog(`new-faculty-${i}`) : getCatalog(),
+      ),
+    );
+    expect(results.every((result) => result.notice === 'Original notice')).toBe(true);
+    expect(state.reads).toHaveBeenCalledTimes(1);
+  });
+  it('reuses one database load across requests and different faculty URLs', async () => {
     await getCatalog();
     await getFacultyCatalog('faculty-a');
     await getFacultyCatalog('faculty-b');
@@ -44,7 +53,7 @@ describe('shared public catalog cache', () => {
       expect((await getFacultyCatalog('faculty-a')).notice).toBe('Original notice');
       expect((await getFacultyCatalog('faculty-b')).notice).toBe('Original notice');
     }
-    expect(state.reads).toHaveBeenCalledTimes(3);
+    expect(state.reads).toHaveBeenCalledTimes(1);
     expect(nextCache.unstable_cache).toHaveBeenCalledWith(
       expect.any(Function),
       ['catalog-v1', expect.stringMatching(/^[a-f0-9]{64}$/)],
@@ -64,7 +73,7 @@ describe('shared public catalog cache', () => {
         getFacultyCatalog('b'),
       ]))
         expect(catalog.notice).toBe('Committed change');
-      expect(state.reads).toHaveBeenCalledTimes(6);
+      expect(state.reads).toHaveBeenCalledTimes(2);
       expect(nextCache.revalidatePath).toHaveBeenCalledWith('/', 'layout');
     },
   );
@@ -104,5 +113,13 @@ describe('shared public catalog cache', () => {
     await expect(getCatalog()).rejects.toThrow('Synthetic database outage');
     expect((await getCatalog()).preview).toBe(false);
     expect(state.reads).toHaveBeenCalledTimes(2);
+  });
+  it('does not expose a malformed connection value in cache-key errors', async () => {
+    vi.stubEnv('DATABASE_URL', 'malformed-synthetic-secret');
+    await expect(getCatalog()).rejects.toThrow(
+      'DATABASE_URL must be a valid PostgreSQL connection URL.',
+    );
+    expect(state.reads).not.toHaveBeenCalled();
+    expect(nextCache.unstable_cache).not.toHaveBeenCalled();
   });
 });

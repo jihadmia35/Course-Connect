@@ -5,6 +5,7 @@ import snapshot from '../../data/advising-snapshot.json';
 import type { Catalog, SourceRow, FacultyView } from './types';
 import { db } from './db';
 import { uniqueMeetings } from './meetings';
+import { coalesceCatalogRead } from './catalog-flight';
 import {
   CATALOG_CACHE_TAG,
   CATALOG_REVALIDATE_SECONDS,
@@ -69,8 +70,7 @@ function preview(): Catalog {
     submissionsEnabled: false,
   };
 }
-function previewFaculty(facultyId: string): Catalog {
-  const data = preview();
+function facultyCatalog(data: Catalog, facultyId: string): Catalog {
   const sections = data.sections.filter((s) => s.facultyIds.includes(facultyId));
   const facultyIds = new Set([facultyId, ...sections.flatMap((s) => s.facultyIds)]);
   return {
@@ -80,26 +80,15 @@ function previewFaculty(facultyId: string): Catalog {
     faculty: data.faculty.filter((f) => facultyIds.has(f.id)),
   };
 }
-async function readCatalog(facultyId?: string): Promise<Catalog> {
-  if (!process.env.DATABASE_URL) return facultyId ? previewFaculty(facultyId) : preview();
+async function readCatalog(): Promise<Catalog> {
+  if (!process.env.DATABASE_URL) return preview();
   const client = db();
   const [faculty, courses, semesters, sections, departments, settings] = await Promise.all([
     client.faculty.findMany({
-      where: facultyId
-        ? {
-            OR: [
-              { id: facultyId },
-              { assignments: { some: { section: { assignments: { some: { facultyId } } } } } },
-            ],
-          }
-        : undefined,
       include: { department: true },
       orderBy: { name: 'asc' },
     }),
     client.course.findMany({
-      where: facultyId
-        ? { sections: { some: { assignments: { some: { facultyId } } } } }
-        : undefined,
       include: { department: true },
       orderBy: { code: 'asc' },
     }),
@@ -107,7 +96,6 @@ async function readCatalog(facultyId?: string): Promise<Catalog> {
       orderBy: [{ isActive: 'desc' }, { startsAt: 'desc' }, { name: 'desc' }],
     }),
     client.courseSection.findMany({
-      where: facultyId ? { assignments: { some: { facultyId } } } : undefined,
       include: { assignments: true, schedules: true, groups: { orderBy: { createdAt: 'asc' } } },
     }),
     client.department.findMany({ orderBy: { name: 'asc' } }),
@@ -160,16 +148,22 @@ async function readCatalog(facultyId?: string): Promise<Catalog> {
     })),
   };
 }
-async function readPublicCatalog(facultyId?: string): Promise<Catalog> {
-  if (!process.env.DATABASE_URL) return readCatalog(facultyId);
-  return unstable_cache(readCatalog, ['catalog-v1', catalogCacheNamespace()], {
-    tags: [CATALOG_CACHE_TAG],
-    revalidate: CATALOG_REVALIDATE_SECONDS,
-  })(facultyId);
+async function readPublicCatalog(): Promise<Catalog> {
+  if (!process.env.DATABASE_URL) return preview();
+  const namespace = catalogCacheNamespace();
+  return unstable_cache(
+    () => coalesceCatalogRead(namespace, readCatalog),
+    ['catalog-v1', namespace],
+    { tags: [CATALOG_CACHE_TAG], revalidate: CATALOG_REVALIDATE_SECONDS },
+  )();
 }
 
 // React cache coalesces repeated calls within a render; Next's Data Cache shares
 // public results across requests. Authentication and mutation checks bypass both.
 export const getCatalog = cache(() => readPublicCatalog());
-export const getFacultyCatalog = cache((facultyId: string) => readPublicCatalog(facultyId));
+// Profiles reuse the directory cache instead of opening another SQL workload
+// for each new faculty URL. Only the filtered view is sent to the browser.
+export const getFacultyCatalog = cache(async (facultyId: string) =>
+  facultyCatalog(await getCatalog(), facultyId),
+);
 export const getAdminCatalog = cache(() => readCatalog());
