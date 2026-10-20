@@ -7,6 +7,7 @@ import { Plus, Pencil, Trash2, Upload, LoaderCircle, Search, FileCode2 } from 'l
 import { toast } from 'sonner';
 import { saveRecord, deleteRecord, uploadPhoto, runImport } from '@/app/admin/actions';
 import type { Catalog } from '@/lib/types';
+import { formatBangladeshDateTime } from '@/lib/date-time';
 import { Modal } from './ui/dialog';
 import { Button } from './ui/button';
 const labels: Record<string, string> = {
@@ -86,6 +87,7 @@ const columns: Record<string, [string, string][]> = {
   ],
   groups: [
     ['section', 'Section'],
+    ['createdAt', 'Submitted'],
     ['semester', 'Semester'],
     ['url', 'Invite URL'],
   ],
@@ -120,7 +122,10 @@ export function AdminManager({
   const router = useRouter();
   const filtered = records.filter((r) =>
       (columns[entity] ?? []).some(([key]) =>
-        String(r[key] ?? '')
+        (key === 'createdAt'
+          ? `${String(r[key] ?? '')} ${Object.values(formatBangladeshDateTime(r[key]) ?? {}).join(' ')}`
+          : String(r[key] ?? '')
+        )
           .toLowerCase()
           .includes(query.toLowerCase()),
       ),
@@ -129,8 +134,25 @@ export function AdminManager({
     current = Math.min(page, pages),
     visible = filtered.slice((current - 1) * 30, current * 30);
   const canCreate = !['groups', 'reports', 'settings'].includes(entity);
-  const displayValue = (value: unknown) =>
-    typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—');
+  const displayValue = (value: unknown, key?: string) => {
+    if (key === 'createdAt') {
+      const submitted = formatBangladeshDateTime(value);
+      return submitted ? (
+        <time
+          className="admin-submitted-at"
+          dateTime={submitted.iso}
+          aria-label={`${submitted.date} at ${submitted.time}, Bangladesh time`}
+          title="Bangladesh time (UTC+6)"
+        >
+          <span>{submitted.date}</span>
+          <span>{submitted.time}</span>
+        </time>
+      ) : (
+        'Not recorded'
+      );
+    }
+    return typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—');
+  };
   function recordActions(r: Record<string, unknown>, mobile = false) {
     const name = String(r.name ?? r.code ?? r.section ?? r.id);
     return (
@@ -213,7 +235,7 @@ export function AdminManager({
             {entity === 'sections'
               ? 'Manage section faculty, classrooms, and multiple class meetings.'
               : entity === 'groups'
-                ? 'Review student shared invites. Edit a URL or remove an invalid group.'
+                ? 'Review student shared invites. Submissions are anonymous; submitter names are not collected.'
                 : entity === 'reports'
                   ? 'Review reports and resolve them after taking action.'
                   : 'Create, update, and maintain directory records.'}
@@ -249,7 +271,12 @@ export function AdminManager({
           }}
         />
       </div>
-      <div className="admin-record-count">{filtered.length} records</div>
+      <div className="admin-record-count">
+        <span>{filtered.length} records</span>
+        {entity === 'groups' && (
+          <span className="admin-order-note">Newest first · Bangladesh time (UTC+6)</span>
+        )}
+      </div>
       <div className="admin-table-wrap admin-desktop-records">
         <table className="admin-table">
           <thead>
@@ -264,7 +291,7 @@ export function AdminManager({
             {visible.map((r) => (
               <tr key={String(r.id)}>
                 {columns[entity]?.map(([key]) => (
-                  <td key={key}>{displayValue(r[key])}</td>
+                  <td key={key}>{displayValue(r[key], key)}</td>
                 ))}
                 <td>{recordActions(r)}</td>
               </tr>
@@ -280,7 +307,7 @@ export function AdminManager({
               {columns[entity]?.slice(1).map(([key, label]) => (
                 <div key={key}>
                   <dt>{label}</dt>
-                  <dd>{displayValue(r[key])}</dd>
+                  <dd>{displayValue(r[key], key)}</dd>
                 </div>
               ))}
             </dl>

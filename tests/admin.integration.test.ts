@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({ client: undefined as PrismaClient | undefined 
 vi.mock('@/lib/db', () => ({ db: () => state.client! }));
 vi.mock('@/lib/auth', () => ({
   requireAdmin: async () => ({ id: '11111111-1111-4111-8111-111111111111' }),
+  requireAdminPage: async () => ({ id: '11111111-1111-4111-8111-111111111111' }),
 }));
 vi.mock('next/cache', async () => ({ ...(await import('./helpers/next-cache')).nextCache }));
 const storage = vi.hoisted(() => ({ upload: vi.fn(), remove: vi.fn() }));
@@ -26,6 +27,7 @@ import {
 import { getCatalog, getFacultyCatalog, getAdminCatalog } from '@/lib/catalog';
 import { clearDataCache, nextCache } from './helpers/next-cache';
 import { CATALOG_CACHE_TAG } from '@/lib/catalog-cache';
+import AdminEntity from '@/app/admin/[entity]/page';
 
 // Warm directory and profile views before EVERY mutation, then compare
 // their next reads with fresh SQL. Covers all CRUD branches, imports and photos.
@@ -347,6 +349,46 @@ describe('authorized admin operations with real PostgreSQL persistence', () => {
     expect(profile.sections[0]?.groups).toHaveLength(1);
     // Remove the disposable audit row to allow the final semester deletion test.
     await state.client!.importHistory.deleteMany();
+  });
+  it('lists submissions newest first with original timestamps, even after editing an older URL', async () => {
+    const client = state.client!;
+    const original = await client.messengerGroupLink.findUniqueOrThrow({ where: { id: groupId } });
+    await client.messengerGroupLink.update({
+      where: { id: groupId },
+      data: { createdAt: new Date('2026-10-19T19:00:00Z') },
+    });
+    const older = await client.messengerGroupLink.create({
+      data: {
+        sectionId,
+        url: 'https://m.me/j/OlderAdminListInvite',
+        normalizedUrl: 'https://m.me/j/OlderAdminListInvite',
+        createdAt: new Date('2026-10-18T18:00:00Z'),
+      },
+    });
+    const latest = await client.messengerGroupLink.create({
+      data: {
+        sectionId,
+        url: 'https://m.me/j/LatestAdminListInvite',
+        normalizedUrl: 'https://m.me/j/LatestAdminListInvite',
+        createdAt: new Date('2026-10-20T06:00:00Z'),
+      },
+    });
+    try {
+      expect(
+        await saveRecord('groups', older.id, form({ url: 'https://m.me/j/EditedOlderListInvite' })),
+      ).toMatchObject({ ok: true });
+      const result = await AdminEntity({ params: Promise.resolve({ entity: 'groups' }) });
+      const records = result.props.records as { id: string; createdAt: string }[];
+      expect(records.map((r) => r.id)).toEqual([latest.id, groupId, older.id]);
+      expect(records[0]?.createdAt).toBe('2026-10-20T06:00:00.000Z');
+      expect(records[2]?.createdAt).toBe('2026-10-18T18:00:00.000Z');
+    } finally {
+      await client.messengerGroupLink.deleteMany({ where: { id: { in: [older.id, latest.id] } } });
+      await client.messengerGroupLink.update({
+        where: { id: groupId },
+        data: { createdAt: original.createdAt },
+      });
+    }
   });
   it('removes groups and their reports explicitly, then removes unreferenced records', async () => {
     expect(await deleteRecord('groups', groupId)).toMatchObject({ ok: true });

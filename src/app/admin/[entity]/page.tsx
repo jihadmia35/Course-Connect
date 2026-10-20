@@ -70,7 +70,7 @@ export default async function AdminEntity({ params }: { params: Promise<{ entity
     records = (
       await db().messengerGroupLink.findMany({
         include: { section: { include: { course: true, semester: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       })
     ).map((g) => ({
       id: g.id,
