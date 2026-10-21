@@ -10,6 +10,11 @@ import { meetingSchema } from '@/lib/parser';
 import { normalizeMessengerUrl } from '@/lib/validation';
 import { InviteResolutionError, resolveMessengerInvite } from '@/lib/resolve-invite';
 import { importHtml } from '@/lib/importer';
+import {
+  assertInviteSection,
+  GroupLinkConflictError,
+  lockGroupInvite,
+} from '@/lib/group-link-policy';
 const text = (max = 160) =>
   z
     .string()
@@ -23,7 +28,8 @@ const optionalId = z
   .transform((s) => s || null);
 export type MutationResult = { ok: boolean; message: string; summary?: unknown };
 function failure(error: unknown): MutationResult {
-  if (error instanceof InviteResolutionError) return { ok: false, message: error.message };
+  if (error instanceof InviteResolutionError || error instanceof GroupLinkConflictError)
+    return { ok: false, message: error.message };
   if (error instanceof z.ZodError)
     return { ok: false, message: error.issues[0]?.message ?? 'Check the form fields.' };
   const e = error as { code?: string; message?: string };
@@ -180,8 +186,10 @@ export async function saveRecord(
       if (!id) throw new Error('Use the public submission workflow.');
       const normalizedUrl = await resolveMessengerInvite(get('url'));
       await client.$transaction(async (tx) => {
+        await lockGroupInvite(tx, normalizedUrl);
         const group = await tx.messengerGroupLink.findUniqueOrThrow({ where: { id } });
         await tx.$queryRaw`SELECT id FROM "CourseSection" WHERE id = ${group.sectionId} FOR UPDATE`;
+        await assertInviteSection(tx, normalizedUrl, group.sectionId);
         const others = await tx.messengerGroupLink.findMany({
           where: { sectionId: group.sectionId, id: { not: id } },
           select: { normalizedUrl: true },

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@/generated/prisma/client';
 import { normalizeMessengerUrl } from './validation';
+import { assertInviteSection, lockGroupInvite } from './group-link-policy';
 export type GroupResult =
   | { status: 'created' | 'duplicate'; id: string }
   | { status: 'warning'; groups: { id: string; url: string }[] };
@@ -15,6 +16,7 @@ export async function saveGroup(
 ): Promise<GroupResult> {
   const normalizedUrl = normalizeMessengerUrl(input.url);
   return client.$transaction(async (tx) => {
+    await lockGroupInvite(tx, normalizedUrl);
     await tx.$queryRaw`SELECT id FROM "CourseSection" WHERE id = ${input.sectionId} FOR UPDATE`;
     const section = await tx.courseSection.findUnique({ where: { id: input.sectionId } });
     if (!section || section.courseId !== input.courseId || section.semesterId !== input.semesterId)
@@ -22,6 +24,7 @@ export async function saveGroup(
     const settings = await tx.appSettings.findUnique({ where: { id: 'default' } });
     if (settings && !settings.submissionsEnabled)
       throw new Error('Submissions are currently paused.');
+    await assertInviteSection(tx, normalizedUrl, input.sectionId);
     const groups = await tx.messengerGroupLink.findMany({
       where: { sectionId: input.sectionId },
       select: { id: true, url: true, normalizedUrl: true },

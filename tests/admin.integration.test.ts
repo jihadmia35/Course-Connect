@@ -260,6 +260,34 @@ describe('authorized admin operations with real PostgreSQL persistence', () => {
       submissionsEnabled: false,
     });
   });
+  it('cannot bypass the cross-section invite rule through an admin URL edit', async () => {
+    const client = state.client!;
+    const other = await client.courseSection.create({
+      data: { courseId, semesterId, number: '2' },
+    });
+    const legacy = 'https://messenger.com/join/CrossSectionAdminInvite';
+    const invite = await client.messengerGroupLink.create({
+      data: { sectionId: other.id, url: legacy, normalizedUrl: legacy },
+    });
+    try {
+      expect(
+        await saveRecord(
+          'groups',
+          groupId,
+          form({
+            url: 'https://www.messenger.com/j/CrossSectionAdminInvite/?send_source=gc%3Acopy_invite',
+          }),
+        ),
+      ).toMatchObject({ ok: false, message: expect.stringContaining('ACT141.2 (Fall - 2026)') });
+      expect(
+        (await client.messengerGroupLink.findUniqueOrThrow({ where: { id: groupId } }))
+          .normalizedUrl,
+      ).toBe('https://m.me/j/EditedTestInvite');
+    } finally {
+      await client.messengerGroupLink.delete({ where: { id: invite.id } });
+      await client.courseSection.delete({ where: { id: other.id } });
+    }
+  });
   it('rejects a spoofed SVG image before any Storage request', async () => {
     vi.stubEnv('SUPABASE_SECRET_KEY', 'local-test-only');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://not-a-real-project.invalid');

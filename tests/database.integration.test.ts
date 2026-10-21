@@ -213,6 +213,47 @@ describe('PostgreSQL migration and core workflows', () => {
     ).rejects.toMatchObject({ code: 'P2002' });
     await reconnectAfterConstraint();
   });
+  it('blocks reusing an invite in another section, including aliases and Submit Anyway', async () => {
+    const other = await client.courseSection.findFirstOrThrow({
+      where: { semesterId, courseId, number: '2' },
+    });
+    for (const submitAnyway of [false, true])
+      for (const url of [
+        'https://m.me/j/FirstInvite',
+        'https://www.messenger.com/j/FirstInvite/?send_source=gc%3Acopy_invite',
+        'https://messenger.com/join/FirstInvite',
+      ])
+        await expect(
+          saveGroup(client, { sectionId: other.id, courseId, semesterId, url, submitAnyway }),
+        ).rejects.toMatchObject({
+          code: 'INVITE_USED_IN_ANOTHER_SECTION',
+          message: expect.stringContaining('ACT141.1 (TEST TERM A)'),
+        });
+    expect(await client.messengerGroupLink.count({ where: { sectionId: other.id } })).toBe(0);
+    expect(await client.messengerGroupLink.count()).toBe(2);
+    const anotherCourse = await client.courseSection.findFirstOrThrow({
+      where: { semesterId, course: { code: 'CSE141' }, number: '1' },
+    });
+    await expect(
+      saveGroup(client, {
+        sectionId: anotherCourse.id,
+        courseId: anotherCourse.courseId,
+        semesterId,
+        url: 'https://m.me/j/FirstInvite',
+        submitAnyway: true,
+      }),
+    ).rejects.toMatchObject({ code: 'INVITE_USED_IN_ANOTHER_SECTION' });
+    const distinct = await saveGroup(client, {
+      sectionId: other.id,
+      courseId,
+      semesterId,
+      url: 'https://m.me/j/OtherSectionInvite',
+      submitAnyway: true,
+    });
+    expect(distinct.status).toBe('created');
+    if (distinct.status === 'created')
+      await client.messengerGroupLink.delete({ where: { id: distinct.id } });
+  });
   it('keeps semester assignments and groups isolated while reusing courses and faculty', async () => {
     const other = await client.semester.create({ data: { name: 'TEST TERM B' } });
     const row = load(html)('.ums-grid-offered-section').first().toString();
@@ -223,6 +264,15 @@ describe('PostgreSQL migration and core workflows', () => {
       where: { semesterId: other.id },
     });
     expect(await client.messengerGroupLink.count({ where: { sectionId: section.id } })).toBe(0);
+    await expect(
+      saveGroup(client, {
+        sectionId: section.id,
+        courseId,
+        semesterId: other.id,
+        url: 'https://m.me/j/FirstInvite',
+        submitAnyway: true,
+      }),
+    ).rejects.toMatchObject({ code: 'INVITE_USED_IN_ANOTHER_SECTION' });
     const facultyId = (
       await client.teachingAssignment.findFirstOrThrow({ where: { sectionId: section.id } })
     ).facultyId;
@@ -305,5 +355,91 @@ describe('PostgreSQL migration and core workflows', () => {
     expect(
       await client.messengerGroupLink.findUniqueOrThrow({ where: { id: group.id } }),
     ).toMatchObject({ url: legacy, normalizedUrl: legacy });
+    const other = await client.courseSection.findFirstOrThrow({
+      where: { semesterId, courseId, number: '2' },
+    });
+    await expect(
+      saveGroup(client, {
+        sectionId: other.id,
+        courseId,
+        semesterId,
+        url: 'https://www.messenger.com/j/LegacyInviteToken/',
+        submitAnyway: true,
+      }),
+    ).rejects.toMatchObject({ code: 'INVITE_USED_IN_ANOTHER_SECTION' });
+  });
+  it('retains the ordinary eight-attempt limit for different invites within fifteen minutes', async () => {
+    vi.stubEnv('RATE_LIMIT_SECRET', 'disposable-database-short-limit-tests-only');
+    vi.stubEnv('VERCEL', '1');
+    const { rateLimit } = await import('@/lib/security');
+    const headers = new Headers({ 'x-forwarded-for': '198.51.100.44' });
+    for (let i = 0; i < 8; i++) await rateLimit(headers, 'groups');
+    await expect(rateLimit(headers, 'groups')).rejects.toThrow('15 minutes');
+  });
+  it('persists a ten-day ban on the third equivalent attempt, survives a cold instance, and expires automatically', async () => {
+    vi.stubEnv('RATE_LIMIT_SECRET', 'disposable-database-abuse-tests-only');
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    const now = Date.parse('2026-10-21T10:00:00Z');
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const headers = new Headers({ 'x-forwarded-for': '198.51.100.21' });
+    const other = new Headers({ 'x-forwarded-for': '198.51.100.22' });
+    const { assertGroupSubmissionAllowed, recordInviteAttempt } = await import('@/lib/group-abuse');
+    const groupCount = await client.messengerGroupLink.count();
+    try {
+      await assertGroupSubmissionAllowed(headers);
+      expect(
+        await recordInviteAttempt(headers, 'https://m.me/j/PersistentBanInvite'),
+      ).toMatchObject({ inviteAttempts: 1, attemptsRemaining: 2 });
+      // A different invite has its own allowance; successful/valid attempts count too.
+      expect(await recordInviteAttempt(headers, 'https://m.me/j/DifferentInvite')).toMatchObject({
+        inviteAttempts: 1,
+      });
+      expect(
+        await recordInviteAttempt(headers, 'https://messenger.com/join/PersistentBanInvite'),
+      ).toMatchObject({ inviteAttempts: 2, attemptsRemaining: 1 });
+      await expect(
+        recordInviteAttempt(
+          headers,
+          'https://www.messenger.com/j/PersistentBanInvite/?send_source=gc%3Acopy_invite',
+        ),
+      ).rejects.toMatchObject({
+        code: 'GROUP_SUBMISSIONS_BLOCKED',
+        blockedUntil: new Date(now + 864000000).toISOString(),
+      });
+      const spy = vi.spyOn(client.rateLimitBucket, 'findUnique');
+      await expect(assertGroupSubmissionAllowed(headers)).rejects.toMatchObject({
+        code: 'GROUP_SUBMISSIONS_BLOCKED',
+      });
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+      // Reload the module to discard all local denial memory, as a new Vercel instance would.
+      vi.resetModules();
+      const cold = await import('@/lib/group-abuse');
+      clock.mockReturnValue(now + 1000);
+      await expect(cold.assertGroupSubmissionAllowed(headers)).rejects.toMatchObject({
+        blockedUntil: new Date(now + 864000000).toISOString(),
+        retryAfterSeconds: 863999,
+      });
+      await cold.assertGroupSubmissionAllowed(other);
+      expect(
+        await cold.recordInviteAttempt(other, 'https://m.me/j/PersistentBanInvite'),
+      ).toMatchObject({ inviteAttempts: 1 });
+      // Retrying cannot extend the original ban.
+      await expect(
+        cold.recordInviteAttempt(headers, 'https://m.me/j/PersistentBanInvite'),
+      ).rejects.toMatchObject({
+        blockedUntil: new Date(now + 864000000).toISOString(),
+      });
+      clock.mockReturnValue(now + 864000000);
+      await cold.assertGroupSubmissionAllowed(headers);
+      expect(
+        await cold.recordInviteAttempt(headers, 'https://m.me/j/PersistentBanInvite'),
+      ).toMatchObject({ inviteAttempts: 1 });
+      expect(await client.messengerGroupLink.count()).toBe(groupCount);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

@@ -61,6 +61,34 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await expect(page.locator('.inline-group')).toHaveCount(1);
   await profile.reload();
   await expect(profile.locator('.inline-group')).toHaveCount(1);
+  const anotherSection = await page.context().newPage();
+  try {
+    await anotherSection.goto('/');
+    await anotherSection
+      .getByRole('searchbox', { name: 'Search courses and sections' })
+      .fill('ACT141.2');
+    await expect(anotherSection.locator('.section-card')).toHaveCount(1);
+    await anotherSection.getByRole('button', { name: 'Add group link' }).click();
+    const blockedDialog = anotherSection.getByRole('dialog');
+    const sameInvite = 'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite';
+    await blockedDialog.getByLabel('Messenger invite URL').fill(sameInvite);
+    await anotherSection.waitForTimeout(2200);
+    const blocked = anotherSection.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/groups') && response.request().method() === 'POST',
+    );
+    await blockedDialog.getByRole('button', { name: 'Share group link', exact: true }).click();
+    expect((await blocked).status()).toBe(409);
+    await expect(blockedDialog.getByRole('alert')).toContainText('ACT141.1 (Fall - 2026)');
+    await expect(blockedDialog.getByRole('alert')).toContainText(
+      'cannot be shared across multiple sections',
+    );
+    await expect(blockedDialog.getByLabel('Messenger invite URL')).toHaveValue(sameInvite);
+    await expect(anotherSection.locator('.inline-group')).toHaveCount(0);
+    await anotherSection.screenshot({ path: 'test-results-db/cross-section-blocked.png' });
+  } finally {
+    await anotherSection.close();
+  }
   await expect(page.locator('.inline-group a')).toHaveAttribute(
     'href',
     'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
@@ -123,7 +151,14 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
   await share(
     'https://www.m.me/j/SecondTestInvite/?send_source=gc%3Acopy_invite&utm_source=equivalent',
   );
-  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('already listed');
+  // SecondTestInvite was checked once, then confirmed with Submit Anyway. This
+  // equivalent third submission must ban further writes before another transaction.
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('blocked for 10 days');
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Bangladesh time');
+  await expect(
+    page.getByRole('button', { name: 'Submissions temporarily blocked', exact: true }),
+  ).toBeDisabled();
+  await page.screenshot({ path: 'test-results-db/ten-day-block.png' });
   await expect(page.locator('.group-row')).toHaveCount(2);
   await page.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Report link' }).first().click();
@@ -160,15 +195,19 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
         semesterId,
         courseId,
         sectionId,
-        url: 'https://www.messenger.com/j/FirstTestInvite/?send_source=gc%3Acopy_invite',
+        url: `https://www.messenger.com/j/DifferentInvite${i}/?send_source=gc%3Acopy_invite`,
         submitAnyway: true,
         website: '',
         token,
       },
     });
     statuses.push(response.status());
+    expect(response.headers()['cache-control']).toBe('no-store');
+    expect(Number(response.headers()['retry-after'])).toBeGreaterThan(863000);
+    expect(await response.json()).toMatchObject({ code: 'GROUP_SUBMISSIONS_BLOCKED' });
   }
-  expect(statuses).toEqual([200, 200, 200, 200, 429]);
+  // A ban applies to every group submission, including distinct links and Submit Anyway.
+  expect(statuses).toEqual([429, 429, 429, 429, 429]);
   await page.getByRole('button', { name: 'Close dialog' }).click();
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search courses and sections' }).fill('ACT141.1');
@@ -243,6 +282,21 @@ test('anonymous submissions, duplicate warning, Submit Anyway, reports and rate 
     );
     await phone.screenshot({ path: 'test-results-db/mobile-manual-copy.png' });
     await manual.getByRole('button', { name: 'Close dialog' }).click();
+    await phone.getByRole('button', { name: 'Add another invite', exact: true }).click();
+    const blockedForm = phone.getByRole('dialog');
+    await blockedForm
+      .getByLabel('Messenger invite URL')
+      .fill('https://m.me/j/FreshButBlockedInvite');
+    await phone.waitForTimeout(2200);
+    await blockedForm.getByRole('button', { name: 'Share group link', exact: true }).click();
+    await expect(blockedForm.getByRole('alert')).toContainText('blocked for 10 days');
+    await expect(
+      blockedForm.getByRole('button', { name: 'Submissions temporarily blocked', exact: true }),
+    ).toBeDisabled();
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await phone.screenshot({ path: 'test-results-db/mobile-ten-day-block.png' });
   } finally {
     await mobile.close();
   }

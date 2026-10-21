@@ -36,6 +36,23 @@ These require the owner's credentials and are not claimed as completed by local 
 - Test rate limiting across more than one Vercel instance and concurrent submissions against real multi-session PostgreSQL. PGlite does not substitute for production concurrency verification.
 - Review database pool utilization, error monitoring, TLS, backups, and hosting limits for expected traffic.
 
+## Ten-day spam protection
+
+This release blocks group submissions for ten days on the third submission of the same normalized invite by the same hashed network address within ten days. Initial success counts; warning plus Submit Anyway consumes two attempts. Equivalent formats and resolved shorteners count together. The response shows when submission becomes available again in Bangladesh time. It does not prevent browsing/joining or reports, and no new migration is required.
+
+By default, counters and bans use the existing PostgreSQL `RateLimitBucket` table. Repeated denied requests skip SQL in a warm instance, but a new Vercel instance must read the ban once. For banned requests to avoid PostgreSQL across instances, connect an Upstash Redis database and add both **server-only** environment variables to Vercel, then redeploy:
+
+```dotenv
+UPSTASH_REDIS_REST_URL="https://your-database.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="your-standard-rest-token"
+```
+
+Get these from the Redis console's REST connection details ([official instructions](https://upstash.com/docs/redis/features/restapi#get-started)). Use the standard writable token, and never prefix these variables with `NEXT_PUBLIC_` or paste credentials into source code. The integration uses HTTP with a three-second timeout and atomic Lua counters, without a persistent Redis socket. The ordinary eight-attempt/fifteen-minute limiter still runs for allowed submissions. Do not configure only one value: incomplete configuration or an unavailable Redis service returns a safe 503 instead of allowing submissions without protection.
+
+Keep the selected backend and `RATE_LIMIT_SECRET` stable across deployments. Redis and PostgreSQL do not automatically copy counters/bans between them; migrating a live installation requires transferring active state separately. A hashed-IP block can affect students sharing a campus/mobile network; it is not reliable person identification. This update does not provision Redis or change any live database data.
+
+In staging, submit a synthetic invite twice, then repeat an equivalent format a third time. Verify HTTP 429, `Retry-After`, Bangladesh-time expiry, no extra group row, rejection of a different invite after the ban, and continued public browsing/reporting. Check a second instance to verify shared persistence. Do not perform this acceptance check on a shared production campus address.
+
 ## Operations
 
 Use Supabase backups and migration history for recovery. Review reports in `/admin/reports`, preserve import audit entries, and monitor rate-limit spikes. Old rate-limit buckets may be removed after expiry by trusted maintenance SQL. Revoke admin access with a trusted database deletion from `AdminUser`; there is intentionally no public admin-grant endpoint.

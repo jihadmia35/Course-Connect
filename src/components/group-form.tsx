@@ -110,6 +110,7 @@ export function GroupForm({
     [section, setSection] = useState(sectionId ?? ''),
     [url, setUrl] = useState(''),
     [busy, setBusy] = useState(false),
+    [blockedUntil, setBlockedUntil] = useState(0),
     [error, setError] = useState(''),
     [warning, setWarning] = useState<{ id: string; url: string }[] | null>(null),
     [success, setSuccess] = useState(false),
@@ -124,7 +125,19 @@ export function GroupForm({
   const sections = catalog.sections.filter(
     (s) => s.courseId === course && s.semesterId === semester,
   );
+  useEffect(() => {
+    if (!blockedUntil) return;
+    const timer = setTimeout(
+      () => {
+        setBlockedUntil(0);
+        setError('');
+      },
+      Math.max(0, blockedUntil - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [blockedUntil]);
   async function submit(form: FormData, anyway = false) {
+    if (blockedUntil > Date.now()) return;
     setBusy(true);
     setError('');
     try {
@@ -143,9 +156,23 @@ export function GroupForm({
       });
       const data = (await response.json()) as GroupResult & {
         error?: string;
+        code?: string;
         resolvedUrl?: string;
+        warning?: string;
+        blockedUntil?: string;
       };
-      if (!response.ok) throw new Error(data.error ?? 'Unable to share group.');
+      if (!response.ok) {
+        if (
+          data.code === 'INVITE_USED_IN_ANOTHER_SECTION' ||
+          data.code === 'GROUP_SUBMISSIONS_BLOCKED'
+        )
+          setWarning(null);
+        if (data.code === 'GROUP_SUBMISSIONS_BLOCKED' && data.blockedUntil) {
+          const until = Date.parse(data.blockedUntil);
+          if (Number.isFinite(until)) setBlockedUntil(until);
+        }
+        throw new Error(data.error ?? 'Unable to share group.');
+      }
       if (data.status === 'warning') {
         if (data.resolvedUrl) setUrl(data.resolvedUrl);
         setWarning(data.groups);
@@ -153,7 +180,7 @@ export function GroupForm({
       }
       if (data.status === 'duplicate') {
         toast.info('This invite is already listed for this section.');
-        setError('This invite is already listed for this section.');
+        setError(`This invite is already listed for this section. ${data.warning ?? ''}`.trim());
         return;
       }
       toast.success('Your group link has been shared.');
@@ -346,26 +373,31 @@ export function GroupForm({
           <strong>Please test your invite first</strong>
           <p>
             By sharing, you confirm that this link opens the correct Messenger group. Admins will
-            remove broken or incorrect links.
+            remove broken or incorrect links. Use a different invite for each course section.
+            Submitting the same invite 3 times blocks group submissions for 10 days.
           </p>
         </div>
       </div>
       <Button
         type="submit"
-        disabled={busy || catalog.preview || !catalog.submissionsEnabled || !token}
+        disabled={
+          busy || !!blockedUntil || catalog.preview || !catalog.submissionsEnabled || !token
+        }
       >
         {busy || (!catalog.preview && catalog.submissionsEnabled && !token && !failed) ? (
           <LoaderCircle className="spin" size={17} />
         ) : (
           <Plus size={17} />
         )}{' '}
-        {busy
-          ? 'Checking invite…'
-          : warning
-            ? 'Submit Anyway'
-            : !catalog.preview && catalog.submissionsEnabled && !token && !failed
-              ? 'Preparing form…'
-              : 'Share group link'}
+        {blockedUntil
+          ? 'Submissions temporarily blocked'
+          : busy
+            ? 'Checking invite…'
+            : warning
+              ? 'Submit Anyway'
+              : !catalog.preview && catalog.submissionsEnabled && !token && !failed
+                ? 'Preparing form…'
+                : 'Share group link'}
       </Button>
       <p className="field-hint">
         Only share invites you have permission to share. No sign-in needed.

@@ -45,6 +45,9 @@ try {
       RATE_LIMIT_SECRET: 'local-ephemeral-tests-only-never-use-in-production',
       NEXT_PUBLIC_SUPABASE_URL: '',
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: '',
+      // Never inherit a production Redis store into the disposable write tests.
+      UPSTASH_REDIS_REST_URL: '',
+      UPSTASH_REDIS_REST_TOKEN: '',
     },
   });
   process.exitCode = await new Promise<number>((resolve) =>

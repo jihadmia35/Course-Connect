@@ -4,6 +4,13 @@ const mocks = vi.hoisted(() => ({
   db: vi.fn(),
   saveGroup: vi.fn(),
   resolve: vi.fn(),
+  abuseCheck: vi.fn(),
+  inviteAttempt: vi.fn(),
+}));
+vi.mock('@/lib/group-abuse', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/group-abuse')>()),
+  assertGroupSubmissionAllowed: mocks.abuseCheck,
+  recordInviteAttempt: mocks.inviteAttempt,
 }));
 vi.mock('@/lib/resolve-invite', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/resolve-invite')>()),
@@ -23,6 +30,8 @@ import { POST as reportPost } from '@/app/api/reports/route';
 import { GET as challengeGet } from '@/app/api/challenge/route';
 import { issueToken } from '@/lib/security';
 import { InviteResolutionError } from '@/lib/resolve-invite';
+import { GroupLinkConflictError } from '@/lib/group-link-policy';
+import { GroupSubmissionBlockedError, GroupAbuseUnavailableError } from '@/lib/group-abuse';
 const origin = 'https://deployment-test.invalid';
 function request(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(origin + path, {
@@ -44,6 +53,12 @@ function validGroup() {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.inviteAttempt.mockResolvedValue({
+    inviteAttempts: 1,
+    attemptsRemaining: 2,
+    warning:
+      'This invite has been submitted 1 of 3 times. Repeating it 2 more times will block group submissions for 10 days.',
+  });
   vi.stubEnv('DATABASE_URL', 'postgresql://test-only.invalid');
   vi.stubEnv('APP_URL', origin);
   vi.stubEnv('RATE_LIMIT_SECRET', 'test-only-route-secret-with-more-than-32-characters');
@@ -123,6 +138,51 @@ describe('public HTTP boundaries without live database access', () => {
     expect(mocks.db).not.toHaveBeenCalled();
     expect(mocks.resolve).not.toHaveBeenCalled();
   });
+  it('rejects a ten-day ban before ordinary rate limits, URL expansion, or group database access', async () => {
+    const until = Date.now() + 10 * 24 * 60 * 60 * 1000;
+    mocks.abuseCheck.mockRejectedValue(new GroupSubmissionBlockedError(until));
+    const response = await groupPost(request('/api/groups', validGroup()));
+    expect(response.status).toBe(429);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(863990);
+    expect(await response.json()).toMatchObject({
+      code: 'GROUP_SUBMISSIONS_BLOCKED',
+      blockedUntil: new Date(until).toISOString(),
+      error: expect.stringContaining('Bangladesh time'),
+    });
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.inviteAttempt).not.toHaveBeenCalled();
+    expect(mocks.db).not.toHaveBeenCalled();
+    expect(mocks.saveGroup).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+  it('blocks the third equivalent attempt before attempting another group transaction', async () => {
+    mocks.resolve.mockResolvedValue('https://m.me/j/RouteTestInvite');
+    mocks.inviteAttempt.mockRejectedValue(new GroupSubmissionBlockedError(Date.now() + 864000000));
+    const response = await groupPost(
+      request('/api/groups', { ...validGroup(), submitAnyway: true }),
+    );
+    expect(response.status).toBe(429);
+    expect(mocks.inviteAttempt).toHaveBeenCalledWith(
+      expect.any(Headers),
+      'https://m.me/j/RouteTestInvite',
+    );
+    expect(mocks.saveGroup).not.toHaveBeenCalled();
+    expect(mocks.db).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+  it('fails closed when configured abuse storage is unavailable', async () => {
+    mocks.abuseCheck.mockRejectedValue(new GroupAbuseUnavailableError());
+    const response = await groupPost(request('/api/groups', validGroup()));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'Group submissions are temporarily unavailable. Please try again shortly.',
+    });
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.db).not.toHaveBeenCalled();
+    expect(mocks.resolve).not.toHaveBeenCalled();
+  });
   it('resolves shortened invites only after abuse checks and returns the canonical URL for confirmation', async () => {
     mocks.resolve.mockResolvedValue('https://m.me/j/ExpandedInvite');
     mocks.saveGroup.mockResolvedValue({
@@ -161,6 +221,28 @@ describe('public HTTP boundaries without live database access', () => {
     expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(200);
     mocks.saveGroup.mockRejectedValue(new Error('Synthetic rollback'));
     expect((await groupPost(request('/api/groups', validGroup()))).status).toBe(400);
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+  it('returns an actionable conflict warning without invalidating caches for cross-section reuse', async () => {
+    mocks.resolve.mockResolvedValue('https://m.me/j/RouteTestInvite');
+    mocks.saveGroup.mockRejectedValue(
+      new GroupLinkConflictError({
+        number: '9',
+        course: { code: 'CSE361' },
+        semester: { name: 'Fall - 2026' },
+      }),
+    );
+    const response = await groupPost(
+      request('/api/groups', { ...validGroup(), submitAnyway: true }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'INVITE_USED_IN_ANOTHER_SECTION',
+      error: expect.stringContaining('CSE361.9 (Fall - 2026)'),
+      attemptsRemaining: 2,
+      warning: expect.stringContaining('10 days'),
+    });
     expect(revalidateTag).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });

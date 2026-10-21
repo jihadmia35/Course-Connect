@@ -51,12 +51,16 @@ export function assertOrigin(request: Request) {
   }
   if (!origin || origin !== expected) throw new Error('Request origin is not allowed.');
 }
-export async function rateLimit(headers: Headers, scope: string, limit = 8) {
+export function rateLimitKey(headers: Headers, scope: string) {
   // Vercel overwrites x-forwarded-for; elsewhere configure a trusted reverse proxy or use the shared bucket.
-  const ip = process.env.VERCEL
-    ? headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-    : 'shared-local';
-  const key = createHmac('sha256', secret()).update(`${scope}:${ip}`).digest('hex');
+  const ip =
+    process.env.VERCEL === '1'
+      ? headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+      : 'shared-local';
+  return createHmac('sha256', secret()).update(`${scope}:${ip}`).digest('hex');
+}
+export async function rateLimit(headers: Headers, scope: string, limit = 8) {
+  const key = rateLimitKey(headers, scope);
   const now = new Date(),
     expires = new Date(Date.now() + 15 * 60000);
   const rows = await db().$queryRaw<
