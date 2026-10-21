@@ -1968,6 +1968,30 @@ main {
   background: #fff9ed;
   color: #94632d;
 }
+.invite-confirmation-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #ead8b0;
+  border-radius: 10px;
+  background: #fff7e7;
+  color: #674b1d;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.invite-confirmation-note > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.invite-confirmation-note strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+.invite-confirmation-note p {
+  margin: 0;
+}
 .existing-warning {
   padding: 21px;
   background: #fff9ed;

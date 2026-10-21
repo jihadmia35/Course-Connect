@@ -340,6 +340,16 @@ export function GroupForm({
           </button>
         </div>
       )}
+      <div className="invite-confirmation-note" role="note">
+        <AlertTriangle size={19} aria-hidden="true" />
+        <div>
+          <strong>Please test your invite first</strong>
+          <p>
+            By sharing, you confirm that this link opens the correct Messenger group. Admins will
+            remove broken or incorrect links.
+          </p>
+        </div>
+      </div>
       <Button
         type="submit"
         disabled={busy || catalog.preview || !catalog.submissionsEnabled || !token}
